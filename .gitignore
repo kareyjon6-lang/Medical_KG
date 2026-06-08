@@ -1,0 +1,45 @@
+.env
+.env.*
+!.env.example
+.venv/
+.venv-training/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.idea/
+node_modules/
+.next/
+dist/
+build/
+models/
+*.log
+figma-*.png
+
+# Local databases and runtime state
+*.sqlite
+*.sqlite3
+*.db
+data/*.sqlite3
+data/**/*.sqlite3
+
+# Generated model/search artifacts
+*.index
+*.faiss
+*.pkl
+*.joblib
+__003__create_neo4j_database/*.json
+
+# Generated extraction/training datasets
+data/extraction/*.jsonl
+__002__extract_information/*_data.json
+__002__extract_information/*_finetune_data.json
+
+# Frontend visual QA screenshots
+web/qa-*.png
+web/qa-*.json
+web/ui-*.png
+web/*-screenshot.png
+web/playwright-report/
+web/test-results/

@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+neo4j
+python-dotenv
+langchain-core
+langchain-openai
+langgraph
+sentence-transformers
+faiss-cpu
+numpy
+pandas
+tqdm
+pydantic
+pytest
+psycopg[binary]

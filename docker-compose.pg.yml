@@ -1,0 +1,21 @@
+services:
+  medical-kg-postgres:
+    image: postgres:16-alpine
+    container_name: medical-kg-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: medical_kg
+      POSTGRES_USER: medical_kg_user
+      POSTGRES_PASSWORD: medical_kg_pg_2026
+    ports:
+      - "15433:5432"
+    volumes:
+      - medical_kg_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medical_kg_user -d medical_kg"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  medical_kg_postgres_data:
