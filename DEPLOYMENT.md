@@ -1,4 +1,4 @@
-# Deployment Notes
+﻿# Deployment Notes
 
 ## Services
 
@@ -78,7 +78,7 @@ Use `.env.example` as the template. Real API keys and database passwords must be
 1. Start PostgreSQL or set `DATABASE_URL=sqlite:///data/app_memory.sqlite3`.
 2. Start Neo4j.
 3. Start FastAPI.
-4. Start the Next.js frontend.
+4. Start the Next.js frontend from `web/`.
 5. Register or log in from the website.
 6. Search for `麻黄汤`.
 7. Open the graph view and verify related herbs render as nodes.
