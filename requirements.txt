@@ -8,7 +8,6 @@ langgraph
 sentence-transformers
 faiss-cpu
 numpy
-pandas
 tqdm
 pydantic
 pytest

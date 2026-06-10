@@ -4,11 +4,9 @@
 
 - Frontend: deploy `web/` to Vercel or another Node host.
 - Backend: deploy `__005__fastapi/app/main.py` with Uvicorn/Gunicorn on Render, Railway, Fly.io, or a small cloud VM.
-- Legacy Streamlit files remain for reference, but the deployable website entry is `web/`.
 - User database: use PostgreSQL for users, sessions, chat history, and long-term memory.
 - Graph database: use Neo4j Aura or a VM-hosted Neo4j instance.
 - Vector index: keep the current FAISS entity-alignment files as backend artifacts; load them from persistent storage at startup.
-- Local extractor: training is intentionally postponed; when the LoRA adapter is ready, mount it under `models/tcm_extractor_lora` and set `TCM_EXTRACTOR_ADAPTER_PATH`.
 
 ## Local Run
 
@@ -61,6 +59,19 @@ npm audit --omit=dev
 ## Required Environment Variables
 
 Use `.env.example` as the template. Real API keys and database passwords must be configured in the deployment platform, not committed.
+
+Required runtime values:
+
+- `MODEL_API_KEY`
+- `MODEL_BASE_URL`
+- `MODEL_NAME`
+- `NEO4J_URI`
+- `NEO4J_USER`
+- `NEO4J_PASSWORD`
+- `DATABASE_URL`
+- `NEXT_PUBLIC_API_BASE_URL`
+- `FRONTEND_ORIGINS`
+- `EMBEDDING_MODEL_PATH`
 
 ## Security Checklist
 

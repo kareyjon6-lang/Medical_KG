@@ -10,6 +10,7 @@ import {
   processUrl,
   searchUrl,
 } from "../lib/api.js";
+import { appendThoughtChunk } from "../lib/thoughts.js";
 
 test("buildApiUrl encodes Chinese query parameters", () => {
   assert.equal(
@@ -32,6 +33,7 @@ test("searchUrl and graphUrl expose stable backend paths", () => {
 
 test("auth endpoints use stable backend paths", () => {
   assert.equal(buildApiUrl("/api/auth/login"), "http://localhost:8000/api/auth/login");
+  assert.equal(buildApiUrl("/api/auth/admin/login"), "http://localhost:8000/api/auth/admin/login");
   assert.equal(buildApiUrl("/api/auth/register"), "http://localhost:8000/api/auth/register");
 });
 
@@ -46,6 +48,11 @@ test("chat thread endpoints expose stable backend paths", () => {
     chatThreadMessagesUrl("thread-1"),
     "http://localhost:8000/api/chat/threads/thread-1/messages"
   );
+});
+
+test("admin endpoints expose stable backend paths", () => {
+  assert.equal(buildApiUrl("/api/admin/users", { limit: 100 }), "http://localhost:8000/api/admin/users?limit=100");
+  assert.equal(buildApiUrl("/api/admin/users/user-1"), "http://localhost:8000/api/admin/users/user-1");
 });
 
 test("streaming chat helpers target process endpoint and parse queued messages", () => {
@@ -73,6 +80,24 @@ test("streaming chat helpers target process endpoint and parse queued messages",
 });
 
 test("website exposes stable page routes", () => {
-  const routes = ["/", "/assistant", "/search", "/graph"];
-  assert.deepEqual(routes, ["/", "/assistant", "/search", "/graph"]);
+  const routes = ["/", "/assistant", "/search", "/graph", "/admin"];
+  assert.deepEqual(routes, ["/", "/assistant", "/search", "/graph", "/admin"]);
+});
+
+test("thought chunks keep Chinese Cypher values on the same line", () => {
+  const chunks = [
+    '开始生成Cypher查询语句{"cypher":"MATCH (s:Symptom) WHERE s.name IN [',
+    '"喉',
+    '痛"',
+    ',',
+    '"咽喉',
+    '痛"',
+    '] RETURN s"}',
+  ];
+  const thoughts = chunks.reduce((items, chunk) => appendThoughtChunk(items, `${chunk}\n`), []);
+
+  assert.equal(thoughts.length, 1);
+  assert.match(thoughts[0], /喉痛/);
+  assert.match(thoughts[0], /咽喉痛/);
+  assert.notEqual(thoughts[0], "痛");
 });

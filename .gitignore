@@ -43,3 +43,16 @@ web/ui-*.png
 web/*-screenshot.png
 web/playwright-report/
 web/test-results/
+
+# Unpublished local pipelines and design material
+__001__clawler/
+__002__extract_information/
+__006__streamlit/
+__007__training/
+data/extraction/
+docs/
+design/
+hyperframes-ui/
+design-qa.md
+requirements-training.txt
+__004__langgraph_more_nodes/graph.jpg

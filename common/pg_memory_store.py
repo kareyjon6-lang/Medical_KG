@@ -23,6 +23,7 @@ class PgMemoryStore:
                 id TEXT PRIMARY KEY,
                 username TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'user',
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """,
@@ -78,41 +79,45 @@ class PgMemoryStore:
         with self._connect() as conn:
             for statement in statements:
                 self._execute(conn, statement)
+            self._ensure_user_role(conn)
             self._ensure_chat_message_thread_id(conn)
             self._commit(conn)
+        self.ensure_default_admin()
 
-    def create_user(self, username: str, password: str) -> Dict[str, Any]:
+    def create_user(self, username: str, password: str, role: str = "user") -> Dict[str, Any]:
         clean_username = username.strip()
         if len(clean_username) < 2:
             raise ValueError("Username must be at least 2 characters.")
         if len(password) < 6:
             raise ValueError("Password must be at least 6 characters.")
+        clean_role = "admin" if role == "admin" else "user"
 
         user = {
             "id": secrets.token_hex(16),
             "username": clean_username,
             "password_hash": hash_password(password),
+            "role": clean_role,
         }
         with self._connect() as conn:
             self._execute(
                 conn,
-                "INSERT INTO users (id, username, password_hash) VALUES ({0}, {0}, {0})",
-                [user["id"], user["username"], user["password_hash"]],
+                "INSERT INTO users (id, username, password_hash, role) VALUES ({0}, {0}, {0}, {0})",
+                [user["id"], user["username"], user["password_hash"], user["role"]],
             )
             self._commit(conn)
-        return {"id": user["id"], "username": user["username"]}
+        return {"id": user["id"], "username": user["username"], "role": user["role"]}
 
     def verify_user(self, username: str, password: str) -> Optional[Dict[str, Any]]:
         user = self.get_user_by_username(username)
         if not user or not verify_password(password, user["password_hash"]):
             return None
-        return {"id": user["id"], "username": user["username"]}
+        return {"id": user["id"], "username": user["username"], "role": user.get("role") or "user"}
 
     def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
             rows = self._query(
                 conn,
-                "SELECT id, username, password_hash FROM users WHERE username = {0}",
+                "SELECT id, username, password_hash, role FROM users WHERE username = {0}",
                 [username.strip()],
             )
         return rows[0] if rows else None
@@ -146,7 +151,7 @@ class PgMemoryStore:
             rows = self._query(
                 conn,
                 """
-                SELECT u.id, u.username, s.id AS session_id, s.token
+                SELECT u.id, u.username, u.role, s.id AS session_id, s.token
                 FROM user_sessions s
                 JOIN users u ON u.id = s.user_id
                 WHERE s.token = {0} AND s.revoked_at IS NULL
@@ -154,6 +159,87 @@ class PgMemoryStore:
                 [token],
             )
         return rows[0] if rows else None
+
+    def ensure_default_admin(self) -> None:
+        username = os.getenv("TCM_ADMIN_USERNAME", "admin").strip()
+        password = os.getenv("TCM_ADMIN_PASSWORD", "admin123")
+        if not username or not password:
+            return
+        with self._connect() as conn:
+            rows = self._query(
+                conn,
+                "SELECT id FROM users WHERE role = {0} LIMIT 1",
+                ["admin"],
+            )
+            if rows:
+                return
+            existing = self._query(
+                conn,
+                "SELECT id FROM users WHERE username = {0} LIMIT 1",
+                [username],
+            )
+            if existing:
+                self._execute(
+                    conn,
+                    "UPDATE users SET role = {0} WHERE id = {0}",
+                    ["admin", existing[0]["id"]],
+                )
+            else:
+                self._execute(
+                    conn,
+                    "INSERT INTO users (id, username, password_hash, role) VALUES ({0}, {0}, {0}, {0})",
+                    [secrets.token_hex(16), username, hash_password(password), "admin"],
+                )
+            self._commit(conn)
+
+    def list_users(self, limit: int = 100) -> List[Dict[str, Any]]:
+        with self._connect() as conn:
+            rows = self._query(
+                conn,
+                """
+                SELECT u.id,
+                       u.username,
+                       u.role,
+                       u.created_at,
+                       COUNT(DISTINCT m.id) AS message_count,
+                       MAX(s.created_at) AS last_login_at
+                FROM users u
+                LEFT JOIN chat_messages m ON m.user_id = u.id
+                LEFT JOIN user_sessions s ON s.user_id = u.id
+                GROUP BY u.id, u.username, u.role, u.created_at
+                ORDER BY u.created_at DESC, u.username ASC
+                LIMIT {0}
+                """,
+                [int(limit)],
+            )
+        return [
+            {
+                "id": row["id"],
+                "username": row["username"],
+                "role": row.get("role") or "user",
+                "created_at": str(row["created_at"]),
+                "message_count": int(row["message_count"] or 0),
+                "last_login_at": str(row["last_login_at"] or ""),
+            }
+            for row in rows
+        ]
+
+    def delete_user(self, user_id: str) -> bool:
+        if not user_id:
+            return False
+        with self._connect() as conn:
+            self._execute(conn, "DELETE FROM user_memories WHERE user_id = {0}", [user_id])
+            self._execute(conn, "DELETE FROM chat_messages WHERE user_id = {0}", [user_id])
+            self._execute(conn, "DELETE FROM chat_threads WHERE user_id = {0}", [user_id])
+            self._execute(conn, "DELETE FROM user_sessions WHERE user_id = {0}", [user_id])
+            cursor = self._execute(conn, "DELETE FROM users WHERE id = {0}", [user_id])
+            self._commit(conn)
+        return bool(cursor.rowcount)
+
+    def count_admins(self) -> int:
+        with self._connect() as conn:
+            rows = self._query(conn, "SELECT COUNT(*) AS count FROM users WHERE role = {0}", ["admin"])
+        return int(rows[0]["count"] or 0) if rows else 0
 
     def create_chat_thread(self, user_id: str, title: str, focus_entity: Optional[str] = None) -> Dict[str, Any]:
         clean_title = (title or "").strip() or "新的对话"
@@ -452,6 +538,14 @@ class PgMemoryStore:
                 self._execute_raw(conn, "ALTER TABLE chat_messages ADD COLUMN thread_id TEXT")
             return
         self._execute_raw(conn, "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS thread_id TEXT")
+
+    def _ensure_user_role(self, conn) -> None:
+        if self.is_sqlite:
+            columns = self._query_raw(conn, "PRAGMA table_info(users)")
+            if not any(row.get("name") == "role" for row in columns):
+                self._execute_raw(conn, "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
+            return
+        self._execute_raw(conn, "ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'")
 
     def _query_raw(self, conn, statement: str, params: Iterable[Any] = ()) -> List[Dict[str, Any]]:
         cursor = self._execute_raw(conn, statement, params)

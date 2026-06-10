@@ -104,6 +104,860 @@
   }
 }
 
+/* Final continuous-background interaction pass. Keep this at EOF. */
+@media (min-width: 861px) {
+  .app-shell.view-assistant,
+  .app-shell.view-admin {
+    --mx: 0;
+    --my: 0;
+    --mouse-x: 50%;
+    --mouse-y: 50%;
+    background: #f5efe2 !important;
+  }
+
+  .view-assistant .ambient-image,
+  .view-admin .ambient-image {
+    inset: -24px !important;
+    opacity: 1 !important;
+    background-image:
+      radial-gradient(circle at var(--mouse-x) var(--mouse-y), rgba(255, 250, 240, 0.26), transparent 28%),
+      linear-gradient(90deg, rgba(245, 239, 226, 0.8) 0%, rgba(245, 239, 226, 0.56) 48%, rgba(245, 239, 226, 0.72) 100%),
+      url("/images/workspace-tcm-vivid-bg.png") !important;
+    background-size: 140% 140%, cover, cover !important;
+    background-position:
+      calc(50% + (var(--mx) * 10px)) calc(50% + (var(--my) * 8px)),
+      center,
+      calc(50% + (var(--mx) * -14px)) calc(50% + (var(--my) * -10px)) !important;
+    filter: saturate(0.9) contrast(0.94) brightness(1.04) !important;
+    transform: scale(1.02) !important;
+    transition: background-position 180ms ease-out, filter 300ms ease !important;
+    animation: workspaceVividDrift 24s ease-in-out infinite alternate !important;
+  }
+
+  .view-assistant .paper-wash,
+  .view-admin .paper-wash {
+    opacity: 0.9 !important;
+    background:
+      radial-gradient(circle at var(--mouse-x) var(--mouse-y), rgba(255, 250, 240, 0.4), transparent 26%),
+      linear-gradient(115deg, rgba(255, 250, 240, 0.18), transparent 38%, rgba(20, 61, 43, 0.035) 78%, transparent),
+      linear-gradient(90deg, rgba(255, 250, 240, 0.24) 1px, transparent 1px),
+      linear-gradient(rgba(20, 61, 43, 0.026) 1px, transparent 1px) !important;
+    background-size: auto, auto, 168px 100%, 100% 136px !important;
+    transform: translate3d(calc(var(--mx) * 5px), calc(var(--my) * 4px), 0) !important;
+    transition: transform 180ms ease-out, background-position 180ms ease-out !important;
+  }
+
+  .view-assistant .workspace,
+  .view-admin .workspace {
+    background:
+      linear-gradient(180deg, rgba(255, 250, 240, 0.2), rgba(255, 250, 240, 0.08)) !important;
+  }
+
+  .view-assistant .topbar,
+  .view-admin .topbar {
+    min-height: 88px !important;
+    background: linear-gradient(90deg, rgba(255, 250, 240, 0.68), rgba(255, 250, 240, 0.36)) !important;
+    backdrop-filter: blur(22px) saturate(0.95) !important;
+  }
+
+  .view-assistant .status-row,
+  .view-admin .status-row,
+  .view-assistant .topbar h1::after,
+  .view-admin .topbar h1::after,
+  .view-assistant .title-block h1::after,
+  .view-admin .title-block h1::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  .view-assistant .history-panel,
+  .view-assistant .chat-surface,
+  .view-assistant .thinking-panel.strong,
+  .view-admin .admin-hero,
+  .view-admin .admin-create,
+  .view-admin .admin-users {
+    border: 1px solid rgba(20, 61, 43, 0.105) !important;
+    background:
+      linear-gradient(180deg, rgba(255, 250, 240, 0.84), rgba(246, 239, 224, 0.7)) !important;
+    box-shadow:
+      0 26px 64px rgba(29, 37, 32, 0.075),
+      inset 0 1px 0 rgba(255, 255, 255, 0.58) !important;
+    backdrop-filter: blur(22px) saturate(0.96) !important;
+  }
+
+  .view-assistant .history-panel:hover,
+  .view-assistant .chat-surface:hover,
+  .view-assistant .thinking-panel.strong:hover,
+  .view-admin .admin-create:hover,
+  .view-admin .admin-users:hover {
+    transform: translateY(-1px) !important;
+    box-shadow:
+      0 30px 74px rgba(29, 37, 32, 0.09),
+      inset 0 1px 0 rgba(255, 255, 255, 0.62) !important;
+  }
+
+  .view-assistant .thinking-panel.strong {
+    color: #25362d !important;
+    background:
+      linear-gradient(180deg, rgba(255, 250, 240, 0.88), rgba(244, 238, 224, 0.74)) !important;
+  }
+
+  .view-assistant .thinking-panel.strong .panel-heading,
+  .view-assistant .thinking-panel.strong h2,
+  .view-assistant .thinking-panel.strong .eyebrow,
+  .view-assistant .thinking-panel.strong .progress-number {
+    color: #173f2d !important;
+  }
+
+  .view-assistant .thinking-log {
+    color: rgba(37, 54, 45, 0.74) !important;
+    background: rgba(255, 250, 240, 0.62) !important;
+  }
+
+  .view-assistant .message,
+  .view-assistant .thread-item,
+  .view-admin .user-row {
+    background: rgba(255, 250, 240, 0.74) !important;
+    box-shadow: 0 12px 28px rgba(29, 37, 32, 0.05) !important;
+  }
+
+  .view-assistant .composer,
+  .view-admin .admin-form input,
+  .view-admin .admin-form select {
+    background: rgba(255, 250, 240, 0.88) !important;
+  }
+
+  .view-assistant .brand,
+  .view-admin .brand {
+    place-items: start center !important;
+    justify-items: center !important;
+  }
+
+  .view-assistant .brand-mark,
+  .view-admin .brand-mark {
+    width: 100% !important;
+    display: grid !important;
+    place-items: start center !important;
+    justify-items: center !important;
+  }
+
+  .view-assistant .brand-mark b,
+  .view-admin .brand-mark b {
+    margin: 0 auto !important;
+    transform: translateX(0) !important;
+    text-align: center !important;
+  }
+
+  .view-assistant .brand-mark i,
+  .view-admin .brand-mark i,
+  .view-assistant .brand-mark::after,
+  .view-admin .brand-mark::after {
+    display: none !important;
+    content: none !important;
+  }
+}
+
+@keyframes workspaceVividDrift {
+  0% {
+    filter: saturate(0.86) contrast(0.93) brightness(1.03);
+  }
+  100% {
+    filter: saturate(0.94) contrast(0.97) brightness(1.06);
+  }
+}
+
+@keyframes workspaceVividDrift {
+  0% {
+    transform: scale(1.035) translate3d(-10px, -5px, 0);
+    filter: saturate(0.98) contrast(1) brightness(0.98);
+  }
+  50% {
+    transform: scale(1.055) translate3d(8px, 5px, 0);
+    filter: saturate(1.08) contrast(1.04) brightness(1.01);
+  }
+  100% {
+    transform: scale(1.045) translate3d(14px, -7px, 0);
+    filter: saturate(1.03) contrast(1.02) brightness(0.99);
+  }
+}
+
+@keyframes workspaceLightSweep {
+  0%, 100% {
+    opacity: 0.78;
+    background-position: 50% 50%, -28% center, center, center;
+  }
+  50% {
+    opacity: 1;
+    background-position: 54% 48%, 128% center, center, center;
+  }
+}
+
+@keyframes workspaceMistFloat {
+  0% {
+    transform: translate3d(-18px, 8px, 0) scale(1);
+    opacity: 0.68;
+  }
+  100% {
+    transform: translate3d(18px, -10px, 0) scale(1.04);
+    opacity: 0.92;
+  }
+}
+
+@keyframes workspaceSoftSweep {
+  0%, 100% {
+    transform: translate3d(-18%, 0, 0);
+    opacity: 0.28;
+  }
+  50% {
+    transform: translate3d(18%, 0, 0);
+    opacity: 0.58;
+  }
+}
+
+/* Specificity lock: old assistant/admin experiments used stronger selectors. */
+@media (min-width: 861px) {
+  .app-shell.view-assistant .ambient-image,
+  .app-shell.view-search .ambient-image,
+  .app-shell.view-graph .ambient-image,
+  .app-shell.view-admin .ambient-image {
+    position: fixed !important;
+    inset: -36px !important;
+    z-index: 0 !important;
+    opacity: 0.98 !important;
+    background-image:
+      radial-gradient(circle at var(--mouse-x) var(--mouse-y), rgba(255, 250, 240, 0.34), transparent 24%),
+      linear-gradient(90deg, rgba(238, 229, 211, 0.64), rgba(238, 229, 211, 0.18) 46%, rgba(238, 229, 211, 0.36)),
+      url("/images/workspace-tcm-vivid-bg.png") !important;
+    background-size: 140% 140%, cover, cover !important;
+    background-position:
+      calc(50% + (var(--mx) * 18px)) calc(50% + (var(--my) * 14px)),
+      center,
+      calc(50% + (var(--mx) * -22px)) calc(50% + (var(--my) * -16px)) !important;
+    filter: saturate(1.03) contrast(1.02) brightness(0.99) !important;
+    transform: scale(1.035) !important;
+    animation: workspaceVividDrift 28s ease-in-out infinite alternate !important;
+  }
+
+  .app-shell.view-assistant .paper-wash,
+  .app-shell.view-search .paper-wash,
+  .app-shell.view-graph .paper-wash,
+  .app-shell.view-admin .paper-wash {
+    z-index: 1 !important;
+    animation: workspaceLightSweep 18s ease-in-out infinite !important;
+  }
+
+  .app-shell.view-assistant .thinking-panel.strong,
+  .app-shell.view-admin .admin-hero,
+  .app-shell.view-admin .admin-create,
+  .app-shell.view-admin .admin-users {
+    background:
+      linear-gradient(180deg, rgba(255, 250, 240, 0.72), rgba(245, 237, 219, 0.52)) !important;
+    backdrop-filter: blur(14px) saturate(1.06) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-assistant .ambient-image,
+  .view-admin .ambient-image {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .view-assistant .paper-wash,
+  .view-admin .paper-wash {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* Comfort pass: softer user/admin workspace, kept last so old experiments cannot win. */
+@media (min-width: 861px) {
+  .app-shell.view-assistant,
+  .app-shell.view-admin {
+    background: #f4efe3 !important;
+  }
+
+  .view-assistant .ambient-image,
+  .view-admin .ambient-image {
+    background-image:
+      linear-gradient(90deg, rgba(244, 239, 227, 0.94) 0%, rgba(244, 239, 227, 0.82) 46%, rgba(244, 239, 227, 0.72) 100%),
+      url("/images/workspace-tcm-soft-bg.png") !important;
+    background-size: cover !important;
+    background-position: center !important;
+    filter: saturate(0.92) contrast(0.98) brightness(1.02) !important;
+  }
+
+  .view-assistant .paper-wash,
+  .view-admin .paper-wash {
+    background:
+      radial-gradient(circle at 76% 18%, rgba(20, 61, 43, 0.045), transparent 26%),
+      radial-gradient(circle at 24% 86%, rgba(197, 154, 74, 0.07), transparent 30%),
+      linear-gradient(90deg, rgba(255, 250, 240, 0.24), rgba(255, 250, 240, 0.04)) !important;
+    background-size: auto !important;
+  }
+
+  .view-assistant .workspace,
+  .view-admin .workspace {
+    background:
+      linear-gradient(180deg, rgba(255, 250, 240, 0.18), rgba(244, 239, 227, 0.1)) !important;
+  }
+
+  .view-assistant .topbar,
+  .view-admin .topbar {
+    min-height: 96px !important;
+    padding: 0 28px !important;
+    background:
+      linear-gradient(90deg, rgba(255, 250, 240, 0.72), rgba(255, 250, 240, 0.48)) !important;
+    border-bottom: 1px solid rgba(20, 61, 43, 0.1) !important;
+    box-shadow: 0 12px 34px rgba(29, 37, 32, 0.04) !important;
+  }
+
+  .view-assistant .status-row,
+  .view-admin .status-row,
+  .view-assistant .topbar h1::after,
+  .view-admin .topbar h1::after,
+  .view-assistant .title-block h1::after,
+  .view-admin .title-block h1::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  .view-assistant .assistant-layout {
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(300px, 360px) !important;
+    gap: 18px !important;
+    padding: 18px 20px 20px !important;
+  }
+
+  .view-assistant .history-panel,
+  .view-assistant .chat-surface,
+  .view-assistant .thinking-panel.strong,
+  .view-admin .admin-hero,
+  .view-admin .admin-create,
+  .view-admin .admin-users {
+    border: 1px solid rgba(20, 61, 43, 0.12) !important;
+    background:
+      linear-gradient(180deg, rgba(255, 250, 240, 0.86), rgba(248, 241, 226, 0.74)) !important;
+    box-shadow: 0 18px 42px rgba(29, 37, 32, 0.08) !important;
+    backdrop-filter: blur(18px) !important;
+  }
+
+  .view-assistant .thinking-panel.strong {
+    color: var(--charcoal) !important;
+    background:
+      linear-gradient(180deg, rgba(255, 250, 240, 0.88), rgba(244, 239, 227, 0.76)) !important;
+  }
+
+  .view-assistant .thinking-panel.strong .panel-heading,
+  .view-assistant .thinking-panel.strong h2,
+  .view-assistant .thinking-panel.strong .eyebrow,
+  .view-assistant .thinking-panel.strong .progress-number {
+    color: var(--ink) !important;
+  }
+
+  .view-assistant .thinking-bar {
+    background: rgba(20, 61, 43, 0.12) !important;
+  }
+
+  .view-assistant .thinking-bar span {
+    background: linear-gradient(90deg, #4e8f5a, #c59a4a) !important;
+  }
+
+  .view-assistant .reasoning-step {
+    color: rgba(29, 37, 32, 0.72) !important;
+  }
+
+  .view-assistant .reasoning-step > span {
+    background: rgba(78, 143, 90, 0.28) !important;
+  }
+
+  .view-assistant .reasoning-step.active > span {
+    background: #4e8f5a !important;
+    box-shadow: 0 0 0 7px rgba(78, 143, 90, 0.14) !important;
+  }
+
+  .view-assistant .thinking-log {
+    border: 1px solid rgba(20, 61, 43, 0.1) !important;
+    border-radius: 8px !important;
+    padding: 12px !important;
+    color: rgba(29, 37, 32, 0.72) !important;
+    background: rgba(255, 250, 240, 0.56) !important;
+  }
+
+  .view-assistant .message,
+  .view-assistant .thread-item,
+  .view-admin .user-row {
+    background: rgba(255, 250, 240, 0.68) !important;
+    box-shadow: 0 10px 24px rgba(29, 37, 32, 0.045) !important;
+  }
+
+  .view-assistant .composer {
+    border-color: rgba(20, 61, 43, 0.22) !important;
+    background: rgba(255, 250, 240, 0.82) !important;
+    box-shadow: 0 16px 36px rgba(29, 37, 32, 0.08) !important;
+  }
+
+  .view-admin .admin-layout {
+    gap: 18px !important;
+    padding: 18px 20px 20px !important;
+  }
+
+  .view-admin .admin-hero {
+    min-height: 124px !important;
+  }
+
+  .view-admin .admin-form input,
+  .view-admin .admin-form select {
+    background: rgba(255, 250, 240, 0.86) !important;
+  }
+
+  .view-assistant .brand-mark,
+  .view-admin .brand-mark {
+    width: 100% !important;
+    justify-items: center !important;
+    place-items: start center !important;
+  }
+
+  .view-assistant .brand-mark b,
+  .view-admin .brand-mark b {
+    margin: 0 auto !important;
+    text-align: center !important;
+  }
+
+  .view-assistant .brand-mark i,
+  .view-admin .brand-mark i {
+    display: none !important;
+  }
+}
+
+/* Real final override: continuous, interactive workspace background. */
+@media (min-width: 861px) {
+  .app-shell.view-assistant,
+  .app-shell.view-admin {
+    --mx: 0;
+    --my: 0;
+    --mouse-x: 50%;
+    --mouse-y: 50%;
+    background: #f5efe2 !important;
+  }
+
+  .app-shell.view-assistant .ambient-image,
+  .app-shell.view-admin .ambient-image {
+    inset: -24px !important;
+    opacity: 1 !important;
+    background-image:
+      radial-gradient(circle at var(--mouse-x) var(--mouse-y), rgba(255, 250, 240, 0.28), transparent 28%),
+      linear-gradient(90deg, rgba(245, 239, 226, 0.8), rgba(245, 239, 226, 0.54) 48%, rgba(245, 239, 226, 0.72)),
+      url("/images/workspace-tcm-vivid-bg.png") !important;
+    background-size: 140% 140%, cover, cover !important;
+    background-position:
+      calc(50% + (var(--mx) * 10px)) calc(50% + (var(--my) * 8px)),
+      center,
+      calc(50% + (var(--mx) * -14px)) calc(50% + (var(--my) * -10px)) !important;
+    filter: saturate(0.9) contrast(0.94) brightness(1.04) !important;
+    transform: scale(1.02) !important;
+    transition: background-position 180ms ease-out, filter 300ms ease !important;
+    animation: workspaceVividDrift 24s ease-in-out infinite alternate !important;
+  }
+
+  .app-shell.view-assistant .paper-wash,
+  .app-shell.view-admin .paper-wash {
+    opacity: 0.9 !important;
+    background:
+      radial-gradient(circle at var(--mouse-x) var(--mouse-y), rgba(255, 250, 240, 0.4), transparent 26%),
+      linear-gradient(115deg, rgba(255, 250, 240, 0.18), transparent 38%, rgba(20, 61, 43, 0.035) 78%, transparent),
+      linear-gradient(90deg, rgba(255, 250, 240, 0.24) 1px, transparent 1px),
+      linear-gradient(rgba(20, 61, 43, 0.026) 1px, transparent 1px) !important;
+    background-size: auto, auto, 168px 100%, 100% 136px !important;
+    transform: translate3d(calc(var(--mx) * 5px), calc(var(--my) * 4px), 0) !important;
+    transition: transform 180ms ease-out, background-position 180ms ease-out !important;
+  }
+
+  .app-shell.view-assistant .workspace,
+  .app-shell.view-admin .workspace {
+    background: linear-gradient(180deg, rgba(255, 250, 240, 0.2), rgba(255, 250, 240, 0.08)) !important;
+  }
+
+  .app-shell.view-assistant .topbar,
+  .app-shell.view-admin .topbar {
+    min-height: 88px !important;
+    background: linear-gradient(90deg, rgba(255, 250, 240, 0.68), rgba(255, 250, 240, 0.36)) !important;
+    backdrop-filter: blur(22px) saturate(0.95) !important;
+  }
+
+  .app-shell.view-assistant .status-row,
+  .app-shell.view-admin .status-row,
+  .app-shell.view-assistant .topbar h1::after,
+  .app-shell.view-admin .topbar h1::after,
+  .app-shell.view-assistant .title-block h1::after,
+  .app-shell.view-admin .title-block h1::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  .app-shell.view-assistant .history-panel,
+  .app-shell.view-assistant .chat-surface,
+  .app-shell.view-assistant .thinking-panel.strong,
+  .app-shell.view-admin .admin-hero,
+  .app-shell.view-admin .admin-create,
+  .app-shell.view-admin .admin-users {
+    border: 1px solid rgba(20, 61, 43, 0.105) !important;
+    background: linear-gradient(180deg, rgba(255, 250, 240, 0.84), rgba(246, 239, 224, 0.7)) !important;
+    box-shadow: 0 26px 64px rgba(29, 37, 32, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.58) !important;
+    backdrop-filter: blur(22px) saturate(0.96) !important;
+  }
+
+  .app-shell.view-assistant .history-panel:hover,
+  .app-shell.view-assistant .chat-surface:hover,
+  .app-shell.view-assistant .thinking-panel.strong:hover,
+  .app-shell.view-admin .admin-create:hover,
+  .app-shell.view-admin .admin-users:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 30px 74px rgba(29, 37, 32, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.62) !important;
+  }
+
+  .app-shell.view-assistant .thinking-panel.strong {
+    color: #25362d !important;
+    background: linear-gradient(180deg, rgba(255, 250, 240, 0.88), rgba(244, 238, 224, 0.74)) !important;
+  }
+
+  .app-shell.view-assistant .thinking-log {
+    color: rgba(37, 54, 45, 0.74) !important;
+    background: rgba(255, 250, 240, 0.62) !important;
+  }
+
+  .app-shell.view-assistant .message,
+  .app-shell.view-assistant .thread-item,
+  .app-shell.view-admin .user-row {
+    background: rgba(255, 250, 240, 0.74) !important;
+    box-shadow: 0 12px 28px rgba(29, 37, 32, 0.05) !important;
+  }
+
+  .app-shell.view-assistant .brand,
+  .app-shell.view-admin .brand,
+  .app-shell.view-assistant .brand-mark,
+  .app-shell.view-admin .brand-mark {
+    justify-items: center !important;
+    place-items: start center !important;
+  }
+
+  .app-shell.view-assistant .brand-mark,
+  .app-shell.view-admin .brand-mark {
+    width: 100% !important;
+  }
+
+  .app-shell.view-assistant .brand-mark b,
+  .app-shell.view-admin .brand-mark b {
+    margin: 0 auto !important;
+    transform: translateX(0) !important;
+    text-align: center !important;
+  }
+
+  .app-shell.view-assistant .brand-mark i,
+  .app-shell.view-admin .brand-mark i,
+  .app-shell.view-assistant .brand-mark::after,
+  .app-shell.view-admin .brand-mark::after {
+    display: none !important;
+    content: none !important;
+  }
+}
+
+@keyframes workspaceVividDrift {
+  0% { filter: saturate(0.86) contrast(0.93) brightness(1.03); }
+  100% { filter: saturate(0.94) contrast(0.97) brightness(1.06); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell.view-assistant .ambient-image,
+  .app-shell.view-admin .ambient-image {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .app-shell.view-assistant .paper-wash,
+  .app-shell.view-admin .paper-wash {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* Final EOF override: continuous, interactive workspace background. */
+@media (min-width: 861px) {
+  .app-shell.view-assistant,
+  .app-shell.view-admin {
+    --mx: 0;
+    --my: 0;
+    --mouse-x: 50%;
+    --mouse-y: 50%;
+    background: #f5efe2 !important;
+  }
+
+  .app-shell.view-assistant .ambient-image,
+  .app-shell.view-admin .ambient-image {
+    inset: -24px !important;
+    opacity: 1 !important;
+    background-image:
+      radial-gradient(circle at var(--mouse-x) var(--mouse-y), rgba(255, 250, 240, 0.28), transparent 28%),
+      linear-gradient(90deg, rgba(245, 239, 226, 0.8), rgba(245, 239, 226, 0.54) 48%, rgba(245, 239, 226, 0.72)),
+      url("/images/workspace-tcm-vivid-bg.png") !important;
+    background-size: 140% 140%, cover, cover !important;
+    background-position:
+      calc(50% + (var(--mx) * 10px)) calc(50% + (var(--my) * 8px)),
+      center,
+      calc(50% + (var(--mx) * -14px)) calc(50% + (var(--my) * -10px)) !important;
+    filter: saturate(0.9) contrast(0.94) brightness(1.04) !important;
+    transform: scale(1.02) !important;
+    transition: background-position 180ms ease-out, filter 300ms ease !important;
+    animation: workspaceVividDrift 24s ease-in-out infinite alternate !important;
+  }
+
+  .app-shell.view-assistant .paper-wash,
+  .app-shell.view-admin .paper-wash {
+    opacity: 0.9 !important;
+    background:
+      radial-gradient(circle at var(--mouse-x) var(--mouse-y), rgba(255, 250, 240, 0.4), transparent 26%),
+      linear-gradient(115deg, rgba(255, 250, 240, 0.18), transparent 38%, rgba(20, 61, 43, 0.035) 78%, transparent),
+      linear-gradient(90deg, rgba(255, 250, 240, 0.24) 1px, transparent 1px),
+      linear-gradient(rgba(20, 61, 43, 0.026) 1px, transparent 1px) !important;
+    background-size: auto, auto, 168px 100%, 100% 136px !important;
+    transform: translate3d(calc(var(--mx) * 5px), calc(var(--my) * 4px), 0) !important;
+    transition: transform 180ms ease-out, background-position 180ms ease-out !important;
+  }
+
+  .app-shell.view-assistant .workspace,
+  .app-shell.view-admin .workspace {
+    background: linear-gradient(180deg, rgba(255, 250, 240, 0.2), rgba(255, 250, 240, 0.08)) !important;
+  }
+
+  .app-shell.view-assistant .topbar,
+  .app-shell.view-admin .topbar {
+    min-height: 88px !important;
+    background: linear-gradient(90deg, rgba(255, 250, 240, 0.68), rgba(255, 250, 240, 0.36)) !important;
+    backdrop-filter: blur(22px) saturate(0.95) !important;
+  }
+
+  .app-shell.view-assistant .status-row,
+  .app-shell.view-admin .status-row,
+  .app-shell.view-assistant .topbar h1::after,
+  .app-shell.view-admin .topbar h1::after,
+  .app-shell.view-assistant .title-block h1::after,
+  .app-shell.view-admin .title-block h1::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  .app-shell.view-assistant .history-panel,
+  .app-shell.view-assistant .chat-surface,
+  .app-shell.view-assistant .thinking-panel.strong,
+  .app-shell.view-admin .admin-hero,
+  .app-shell.view-admin .admin-create,
+  .app-shell.view-admin .admin-users {
+    border: 1px solid rgba(20, 61, 43, 0.105) !important;
+    background: linear-gradient(180deg, rgba(255, 250, 240, 0.84), rgba(246, 239, 224, 0.7)) !important;
+    box-shadow: 0 26px 64px rgba(29, 37, 32, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.58) !important;
+    backdrop-filter: blur(22px) saturate(0.96) !important;
+  }
+
+  .app-shell.view-assistant .history-panel:hover,
+  .app-shell.view-assistant .chat-surface:hover,
+  .app-shell.view-assistant .thinking-panel.strong:hover,
+  .app-shell.view-admin .admin-create:hover,
+  .app-shell.view-admin .admin-users:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 30px 74px rgba(29, 37, 32, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.62) !important;
+  }
+
+  .app-shell.view-assistant .thinking-panel.strong {
+    color: #25362d !important;
+    background: linear-gradient(180deg, rgba(255, 250, 240, 0.88), rgba(244, 238, 224, 0.74)) !important;
+  }
+
+  .app-shell.view-assistant .thinking-log {
+    color: rgba(37, 54, 45, 0.74) !important;
+    background: rgba(255, 250, 240, 0.62) !important;
+  }
+
+  .app-shell.view-assistant .message,
+  .app-shell.view-assistant .thread-item,
+  .app-shell.view-admin .user-row {
+    background: rgba(255, 250, 240, 0.74) !important;
+    box-shadow: 0 12px 28px rgba(29, 37, 32, 0.05) !important;
+  }
+
+  .app-shell.view-assistant .brand,
+  .app-shell.view-admin .brand,
+  .app-shell.view-assistant .brand-mark,
+  .app-shell.view-admin .brand-mark {
+    justify-items: center !important;
+    place-items: start center !important;
+  }
+
+  .app-shell.view-assistant .brand-mark {
+    width: 100% !important;
+  }
+
+  .app-shell.view-admin .brand-mark {
+    width: 100% !important;
+  }
+
+  .app-shell.view-assistant .brand-mark b,
+  .app-shell.view-admin .brand-mark b {
+    margin: 0 auto !important;
+    transform: translateX(0) !important;
+    text-align: center !important;
+  }
+
+  .app-shell.view-assistant .brand-mark i,
+  .app-shell.view-admin .brand-mark i,
+  .app-shell.view-assistant .brand-mark::after,
+  .app-shell.view-admin .brand-mark::after {
+    display: none !important;
+    content: none !important;
+  }
+}
+
+@keyframes workspaceVividDrift {
+  0% { filter: saturate(0.86) contrast(0.93) brightness(1.03); }
+  100% { filter: saturate(0.94) contrast(0.97) brightness(1.06); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell.view-assistant .ambient-image,
+  .app-shell.view-admin .ambient-image {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .app-shell.view-assistant .paper-wash,
+  .app-shell.view-admin .paper-wash {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* Final polish for interactive landing and cleaner workspace background. */
+.landing-shell {
+  --mx: 0;
+  --my: 0;
+}
+
+.landing-image-bg {
+  animation: none !important;
+  transform:
+    scale(1.045)
+    translate3d(calc(var(--mx) * -18px), calc(var(--my) * -12px), 0) !important;
+  transition: transform 120ms ease-out;
+  will-change: transform;
+}
+
+.landing-mist {
+  transform: translate3d(calc(var(--mx) * 20px), calc(var(--my) * 14px), 0);
+  transition: transform 160ms ease-out;
+  will-change: transform;
+}
+
+.landing-graph {
+  transform: translate3d(calc(var(--mx) * 34px), calc(var(--my) * 24px), 0);
+  transition: transform 120ms ease-out;
+  will-change: transform;
+}
+
+.landing-hero {
+  transform: translate3d(calc(var(--mx) * -10px), calc(var(--my) * -6px), 0);
+  transition: transform 150ms ease-out;
+  will-change: transform;
+}
+
+.landing-login-button {
+  transform: translate3d(calc(var(--mx) * -4px), calc(var(--my) * -3px), 0);
+}
+
+@media (min-width: 861px) {
+  .ambient-image {
+    background-image:
+      linear-gradient(90deg, rgba(244, 239, 227, 0.93) 0%, rgba(244, 239, 227, 0.78) 45%, rgba(244, 239, 227, 0.62) 100%),
+      url("/images/workspace-tcm-wash-bg.png") !important;
+    background-size: cover !important;
+    background-position: center !important;
+    filter: saturate(0.95) contrast(0.98) !important;
+  }
+
+  .paper-wash {
+    background:
+      radial-gradient(circle at 86% 16%, rgba(20, 61, 43, 0.04), transparent 24%),
+      radial-gradient(circle at 20% 88%, rgba(197, 154, 74, 0.08), transparent 28%),
+      linear-gradient(90deg, rgba(255, 250, 240, 0.22), rgba(255, 250, 240, 0.08)),
+      rgba(244, 239, 227, 0.06) !important;
+    background-size: auto !important;
+  }
+
+  .workspace {
+    background: rgba(255, 250, 240, 0.14) !important;
+  }
+
+  .history-panel,
+  .chat-surface,
+  .thinking-panel.strong,
+  .search-filter-panel,
+  .search-main,
+  .search-side > section,
+  .graph-toolbar,
+  .graph-scene,
+  .graph-inspector,
+  .admin-hero,
+  .admin-create,
+  .admin-users {
+    background:
+      linear-gradient(180deg, rgba(255, 250, 240, 0.82), rgba(248, 241, 226, 0.7)) !important;
+    backdrop-filter: blur(20px) !important;
+  }
+
+  .thinking-panel.strong,
+  .graph-scene {
+    background:
+      linear-gradient(180deg, rgba(14, 64, 45, 0.88), rgba(8, 48, 36, 0.9)) !important;
+  }
+
+  .topbar {
+    min-height: 94px !important;
+    padding: 0 28px !important;
+  }
+
+  .status-row {
+    display: none !important;
+  }
+
+  .topbar h1::after,
+  .title-block h1::after {
+    content: none !important;
+    display: none !important;
+  }
+
+  .brand {
+    justify-items: center !important;
+    place-items: start center !important;
+    text-align: center !important;
+  }
+
+  .brand-mark {
+    width: 100% !important;
+    height: 112px !important;
+    display: grid !important;
+    place-items: start center !important;
+    transform: translateX(0) !important;
+    text-align: center !important;
+  }
+
+  .brand-mark b {
+    margin: 0 auto !important;
+    transform: translateX(0) !important;
+    text-align: center !important;
+  }
+
+  .brand-mark i {
+    display: none !important;
+  }
+}
+
 .top-actions {
   display: none !important;
 }
@@ -477,9 +1331,10 @@
 }
 
 .thinking-log p {
-  white-space: pre-wrap !important;
-  word-break: break-word !important;
-  overflow-wrap: anywhere !important;
+  min-width: max-content !important;
+  white-space: pre !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
 }
 
 @media (max-width: 1160px) {
@@ -1323,3 +2178,727 @@
     line-height: 1.42 !important;
   }
 }
+
+/* Absolute final sidebar override. Keep this at EOF. */
+@media (min-width: 861px) {
+  .app-shell {
+    grid-template-columns: 122px minmax(0, 1fr) !important;
+  }
+
+  .sidebar {
+    height: 100vh !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    box-sizing: border-box !important;
+    display: grid !important;
+    grid-template-rows: 136px minmax(0, 1fr) 48px !important;
+    gap: 0 !important;
+    padding: 26px 7px 16px !important;
+    overflow: hidden !important;
+    border-right: 0 !important;
+    background: linear-gradient(180deg, rgba(0, 66, 47, 0.74), rgba(0, 38, 29, 0.98)), url("/images/sidebar-herbal-ink-v2.png"), url("/images/sidebar-herbal-ink.png") !important;
+    background-size: cover, cover, cover !important;
+    background-position: center top, center top, center top !important;
+    box-shadow: inset -1px 0 0 rgba(255, 250, 240, 0.08) !important;
+  }
+
+  .sidebar::after {
+    content: "" !important;
+    position: absolute !important;
+    inset: 0 !important;
+    pointer-events: none !important;
+    background: radial-gradient(circle at 48% 9%, rgba(255, 250, 240, 0.1), transparent 18%), linear-gradient(180deg, transparent 0 76%, rgba(0, 24, 18, 0.48)) !important;
+    opacity: 0.5 !important;
+  }
+
+  .brand,
+  .tabs,
+  .logout-button {
+    position: relative !important;
+    z-index: 1 !important;
+  }
+
+  .brand {
+    min-height: 0 !important;
+    height: 136px !important;
+    display: grid !important;
+    place-items: start center !important;
+    padding-top: 2px !important;
+    gap: 0 !important;
+    text-align: center !important;
+  }
+
+  .brand strong,
+  .brand > span:not(.brand-mark) {
+    display: none !important;
+  }
+
+  .brand-mark {
+    position: relative !important;
+    width: 86px !important;
+    height: 120px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    display: grid !important;
+    place-items: start center !important;
+    background: transparent !important;
+    color: #fffaf0 !important;
+    text-shadow: 0 4px 18px rgba(0, 0, 0, 0.36) !important;
+  }
+
+  .brand-mark b {
+    display: block !important;
+    font-family: STKaiti, KaiTi, "Source Han Serif SC", serif !important;
+    font-size: 38px !important;
+    font-weight: 900 !important;
+    font-style: normal !important;
+    line-height: 0.94 !important;
+    letter-spacing: 0 !important;
+    writing-mode: vertical-rl !important;
+  }
+
+  .brand-mark i {
+    position: absolute !important;
+    left: 5px !important;
+    top: 26px !important;
+    margin: 0 !important;
+    padding: 2px 3px !important;
+    border-radius: 4px !important;
+    color: #fff7e8 !important;
+    background: #b9472e !important;
+    font-size: 10px !important;
+    font-style: normal !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+    writing-mode: horizontal-tb !important;
+  }
+
+  .tabs {
+    min-height: 0 !important;
+    display: grid !important;
+    align-content: start !important;
+    justify-items: center !important;
+    gap: 13px !important;
+    padding-top: 20px !important;
+    overflow: visible !important;
+  }
+
+  .tab {
+    width: 96px !important;
+    height: 76px !important;
+    margin: 0 auto !important;
+    padding: 7px 0 8px !important;
+    border-radius: 8px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 7px !important;
+    color: rgba(255, 250, 240, 0.78) !important;
+    background: transparent !important;
+    font-family: STKaiti, KaiTi, "Microsoft YaHei", sans-serif !important;
+    font-size: 18px !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+  }
+
+  .tab svg {
+    width: 28px !important;
+    height: 28px !important;
+    stroke-width: 1.9 !important;
+  }
+
+  .tab.active {
+    color: #fffaf0 !important;
+    background: rgba(255, 250, 240, 0.14) !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 250, 240, 0.22), 0 14px 34px rgba(0, 0, 0, 0.22) !important;
+  }
+
+  .tab:hover {
+    transform: translateY(-1px) !important;
+  }
+
+  .logout-button {
+    align-self: end !important;
+    width: 108px !important;
+    min-height: 44px !important;
+    height: 44px !important;
+    margin: 0 auto !important;
+    padding: 0 12px !important;
+    border-color: rgba(255, 250, 240, 0.24) !important;
+    color: rgba(255, 250, 240, 0.92) !important;
+    background: rgba(255, 250, 240, 0.09) !important;
+    font-size: 15px !important;
+  }
+
+  .logout-button svg {
+    width: 17px !important;
+    height: 17px !important;
+  }
+
+  .app-shell.view-assistant,
+  .app-shell.view-search,
+  .app-shell.view-graph,
+  .app-shell.view-admin {
+    grid-template-columns: 122px minmax(0, 1fr) !important;
+  }
+
+  .view-assistant .sidebar,
+  .view-search .sidebar,
+  .view-graph .sidebar,
+  .view-admin .sidebar {
+    width: 122px !important;
+    max-width: 122px !important;
+    padding: 26px 7px 16px !important;
+    display: grid !important;
+    grid-template-rows: 136px minmax(0, 1fr) 48px !important;
+    gap: 0 !important;
+  }
+
+  .view-assistant .brand,
+  .view-search .brand,
+  .view-graph .brand,
+  .view-admin .brand {
+    height: 136px !important;
+    min-height: 0 !important;
+    place-items: start center !important;
+    padding-top: 2px !important;
+  }
+
+  .view-assistant .brand-mark,
+  .view-search .brand-mark,
+  .view-graph .brand-mark,
+  .view-admin .brand-mark {
+    width: 86px !important;
+    height: 120px !important;
+  }
+
+  .view-assistant .tabs,
+  .view-search .tabs,
+  .view-graph .tabs,
+  .view-admin .tabs {
+    display: grid !important;
+    align-content: start !important;
+    justify-items: center !important;
+    gap: 13px !important;
+    padding-top: 20px !important;
+  }
+
+  .view-assistant .tab,
+  .view-search .tab,
+  .view-graph .tab,
+  .view-admin .tab {
+    width: 96px !important;
+    height: 76px !important;
+    min-height: 0 !important;
+    padding: 7px 0 8px !important;
+    gap: 7px !important;
+    font-size: 18px !important;
+  }
+
+  .view-assistant .tab svg,
+  .view-search .tab svg,
+  .view-graph .tab svg,
+  .view-admin .tab svg {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  .view-assistant .logout-button,
+  .view-search .logout-button,
+  .view-graph .logout-button,
+  .view-admin .logout-button {
+    width: 108px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    margin: 0 auto !important;
+  }
+}
+
+/* Definitive visible dynamic workspace pass. This must stay at EOF. */
+@media (min-width: 861px) {
+  .app-shell.view-assistant,
+  .app-shell.view-search,
+  .app-shell.view-graph,
+  .app-shell.view-admin {
+    --mx: 0;
+    --my: 0;
+    --mouse-x: 50%;
+    --mouse-y: 50%;
+    isolation: isolate !important;
+    background: #eee5d3 !important;
+  }
+
+  .view-assistant .ambient-image,
+  .view-search .ambient-image,
+  .view-graph .ambient-image,
+  .view-admin .ambient-image {
+    position: fixed !important;
+    inset: -36px !important;
+    z-index: 0 !important;
+    pointer-events: none !important;
+    opacity: 0.98 !important;
+    background-image:
+      radial-gradient(circle at var(--mouse-x) var(--mouse-y), rgba(255, 250, 240, 0.34), transparent 24%),
+      linear-gradient(90deg, rgba(238, 229, 211, 0.64), rgba(238, 229, 211, 0.18) 46%, rgba(238, 229, 211, 0.36)),
+      url("/images/workspace-tcm-vivid-bg.png") !important;
+    background-size: 140% 140%, cover, cover !important;
+    background-position:
+      calc(50% + (var(--mx) * 18px)) calc(50% + (var(--my) * 14px)),
+      center,
+      calc(50% + (var(--mx) * -22px)) calc(50% + (var(--my) * -16px)) !important;
+    filter: saturate(1.03) contrast(1.02) brightness(0.99) !important;
+    transform: scale(1.035) !important;
+    transition: background-position 180ms ease-out, filter 300ms ease !important;
+    animation: workspaceVividDrift 28s ease-in-out infinite alternate !important;
+  }
+
+  .view-assistant .paper-wash,
+  .view-search .paper-wash,
+  .view-graph .paper-wash,
+  .view-admin .paper-wash {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 1 !important;
+    pointer-events: none !important;
+    opacity: 1 !important;
+    background:
+      radial-gradient(circle at var(--mouse-x) var(--mouse-y), rgba(255, 250, 240, 0.42), transparent 23%),
+      linear-gradient(110deg, transparent 0 18%, rgba(255, 250, 240, 0.34) 34%, transparent 56%),
+      linear-gradient(90deg, rgba(255, 250, 240, 0.2) 1px, transparent 1px),
+      linear-gradient(rgba(20, 61, 43, 0.04) 1px, transparent 1px) !important;
+    background-size: auto, auto, 156px 100%, 100% 128px !important;
+    background-position:
+      calc(50% + (var(--mx) * 8px)) calc(50% + (var(--my) * 6px)),
+      calc(50% + (var(--mx) * -12px)) center,
+      center,
+      center !important;
+    mix-blend-mode: soft-light !important;
+    transform: translate3d(calc(var(--mx) * 7px), calc(var(--my) * 5px), 0) !important;
+    transition: transform 180ms ease-out, background-position 180ms ease-out !important;
+    animation: workspaceLightSweep 18s ease-in-out infinite !important;
+  }
+
+  .view-assistant .sidebar,
+  .view-search .sidebar,
+  .view-graph .sidebar,
+  .view-admin .sidebar {
+    position: relative !important;
+    z-index: 4 !important;
+  }
+
+  .app-shell.view-assistant::before,
+  .app-shell.view-search::before,
+  .app-shell.view-graph::before,
+  .app-shell.view-admin::before,
+  .app-shell.view-assistant::after,
+  .app-shell.view-search::after,
+  .app-shell.view-graph::after,
+  .app-shell.view-admin::after {
+    content: "" !important;
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 1 !important;
+    pointer-events: none !important;
+  }
+
+  .app-shell.view-assistant::before,
+  .app-shell.view-search::before,
+  .app-shell.view-graph::before,
+  .app-shell.view-admin::before {
+    background:
+      radial-gradient(circle at 18% 74%, rgba(7, 79, 55, 0.14), transparent 32%),
+      radial-gradient(circle at 82% 18%, rgba(185, 71, 46, 0.12), transparent 24%),
+      linear-gradient(180deg, rgba(255, 250, 240, 0.1), rgba(20, 61, 43, 0.055)) !important;
+    animation: workspaceMistFloat 22s ease-in-out infinite alternate !important;
+  }
+
+  .app-shell.view-assistant::after,
+  .app-shell.view-search::after,
+  .app-shell.view-graph::after,
+  .app-shell.view-admin::after {
+    background:
+      linear-gradient(105deg, transparent 0 28%, rgba(255, 250, 240, 0.26) 42%, transparent 58%),
+      radial-gradient(circle at 50% 50%, transparent 42%, rgba(20, 61, 43, 0.08)) !important;
+    mix-blend-mode: screen !important;
+    opacity: 0.58 !important;
+    animation: workspaceSoftSweep 15s ease-in-out infinite !important;
+  }
+
+  .view-assistant .workspace,
+  .view-search .workspace,
+  .view-graph .workspace,
+  .view-admin .workspace {
+    position: relative !important;
+    z-index: 3 !important;
+    background: linear-gradient(180deg, rgba(255, 250, 240, 0.06), rgba(255, 250, 240, 0.02)) !important;
+  }
+
+  .view-assistant .topbar,
+  .view-search .topbar,
+  .view-graph .topbar,
+  .view-admin .topbar {
+    min-height: 88px !important;
+    padding: 0 28px !important;
+    background: linear-gradient(90deg, rgba(255, 250, 240, 0.72), rgba(255, 250, 240, 0.28)) !important;
+    border-bottom: 1px solid rgba(20, 61, 43, 0.1) !important;
+    box-shadow: 0 12px 34px rgba(29, 37, 32, 0.04) !important;
+    backdrop-filter: blur(16px) saturate(1.02) !important;
+  }
+
+  .view-assistant .status-row,
+  .view-search .status-row,
+  .view-graph .status-row,
+  .view-admin .status-row,
+  .view-assistant .topbar h1::after,
+  .view-search .topbar h1::after,
+  .view-graph .topbar h1::after,
+  .view-admin .topbar h1::after,
+  .view-assistant .title-block h1::after,
+  .view-search .title-block h1::after,
+  .view-graph .title-block h1::after,
+  .view-admin .title-block h1::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  .view-assistant .assistant-layout {
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(300px, 360px) !important;
+    gap: 18px !important;
+    padding: 18px 20px 20px !important;
+  }
+
+  .view-admin .admin-layout {
+    gap: 18px !important;
+    padding: 18px 20px 20px !important;
+  }
+
+  .view-assistant .history-panel,
+  .view-assistant .chat-surface,
+  .view-assistant .thinking-panel.strong,
+  .view-search .search-filter-panel,
+  .view-search .search-main,
+  .view-search .search-side > section,
+  .view-graph .graph-toolbar,
+  .view-graph .graph-scene,
+  .view-graph .graph-inspector,
+  .view-admin .admin-hero,
+  .view-admin .admin-create,
+  .view-admin .admin-users {
+    border: 1px solid rgba(20, 61, 43, 0.12) !important;
+    background:
+      linear-gradient(180deg, rgba(255, 250, 240, 0.72), rgba(245, 237, 219, 0.52)) !important;
+    box-shadow:
+      0 30px 82px rgba(29, 37, 32, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.66) !important;
+    backdrop-filter: blur(14px) saturate(1.06) !important;
+  }
+
+  .view-assistant .history-panel:hover,
+  .view-assistant .chat-surface:hover,
+  .view-assistant .thinking-panel.strong:hover,
+  .view-search .search-filter-panel:hover,
+  .view-search .search-main:hover,
+  .view-search .search-side > section:hover,
+  .view-admin .admin-create:hover,
+  .view-admin .admin-users:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 30px 74px rgba(29, 37, 32, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.62) !important;
+  }
+
+  .view-search .search-box,
+  .view-search .facet-row,
+  .view-search .result-tools,
+  .view-search .result-card,
+  .view-search .detail-panel dl,
+  .view-admin .user-row,
+  .view-assistant .message,
+  .view-assistant .thread-item {
+    background: rgba(255, 250, 240, 0.66) !important;
+    backdrop-filter: blur(10px) saturate(1.05) !important;
+  }
+
+  .view-graph .graph-scene {
+    background:
+      linear-gradient(180deg, rgba(4, 52, 39, 0.72), rgba(5, 42, 34, 0.8)),
+      radial-gradient(circle at 58% 20%, rgba(255, 250, 240, 0.1), transparent 30%),
+      url("/images/workspace-tcm-vivid-bg.png") !important;
+    background-size: auto, auto, cover !important;
+    background-position: center, center, center !important;
+  }
+
+  .view-graph .graph-inspector,
+  .view-search .search-side > section {
+    background:
+      linear-gradient(180deg, rgba(255, 250, 240, 0.78), rgba(242, 235, 218, 0.58)) !important;
+  }
+
+  .view-assistant .thinking-panel.strong {
+    color: #25362d !important;
+    background:
+      linear-gradient(180deg, rgba(255, 250, 240, 0.76), rgba(244, 238, 224, 0.54)) !important;
+  }
+
+  .view-assistant .thinking-panel.strong .panel-heading,
+  .view-assistant .thinking-panel.strong h2,
+  .view-assistant .thinking-panel.strong .eyebrow,
+  .view-assistant .thinking-panel.strong .progress-number {
+    color: #143d2b !important;
+  }
+
+  .view-assistant .thinking-bar {
+    background: rgba(20, 61, 43, 0.12) !important;
+  }
+
+  .view-assistant .thinking-bar span {
+    background: linear-gradient(90deg, #4e8f5a, #c59a4a) !important;
+  }
+
+  .view-assistant .reasoning-step {
+    color: rgba(29, 37, 32, 0.72) !important;
+  }
+
+  .view-assistant .reasoning-step > span {
+    background: rgba(78, 143, 90, 0.28) !important;
+  }
+
+  .view-assistant .reasoning-step.active > span {
+    background: #4e8f5a !important;
+    box-shadow: 0 0 0 7px rgba(78, 143, 90, 0.14) !important;
+  }
+
+  .view-assistant .thinking-log {
+    border: 1px solid rgba(20, 61, 43, 0.1) !important;
+    border-radius: 8px !important;
+    padding: 12px !important;
+    color: rgba(37, 54, 45, 0.74) !important;
+    background: rgba(255, 250, 240, 0.62) !important;
+  }
+
+  .view-assistant .message,
+  .view-assistant .thread-item,
+  .view-admin .user-row {
+    background: rgba(255, 250, 240, 0.66) !important;
+    box-shadow: 0 12px 28px rgba(29, 37, 32, 0.05) !important;
+  }
+
+  .view-assistant .composer {
+    border-color: rgba(20, 61, 43, 0.22) !important;
+    background: rgba(255, 250, 240, 0.74) !important;
+    box-shadow: 0 16px 36px rgba(29, 37, 32, 0.08) !important;
+    backdrop-filter: blur(14px) saturate(1.06) !important;
+  }
+
+  .view-admin .admin-hero {
+    min-height: 124px !important;
+  }
+
+  .view-admin .admin-form input,
+  .view-admin .admin-form select {
+    background: rgba(255, 250, 240, 0.88) !important;
+  }
+
+  .view-assistant .brand-mark,
+  .view-search .brand-mark,
+  .view-graph .brand-mark,
+  .view-admin .brand-mark {
+    width: 100% !important;
+    display: grid !important;
+    justify-items: center !important;
+    place-items: start center !important;
+  }
+
+  .view-assistant .brand-mark b,
+  .view-search .brand-mark b,
+  .view-graph .brand-mark b,
+  .view-admin .brand-mark b {
+    margin: 0 auto !important;
+    transform: translateX(0) !important;
+    text-align: center !important;
+  }
+
+  .view-assistant .brand-mark i,
+  .view-search .brand-mark i,
+  .view-graph .brand-mark i,
+  .view-admin .brand-mark i,
+  .view-assistant .brand-mark::after,
+  .view-search .brand-mark::after,
+  .view-graph .brand-mark::after,
+  .view-admin .brand-mark::after {
+    display: none !important;
+    content: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-assistant .ambient-image,
+  .view-search .ambient-image,
+  .view-graph .ambient-image,
+  .view-admin .ambient-image {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .view-assistant .paper-wash,
+  .view-search .paper-wash,
+  .view-graph .paper-wash,
+  .view-admin .paper-wash {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* Screenshot-driven clarity pass: keep the moving wash visible without sacrificing reading surfaces. */
+.app-shell.view-assistant,
+.app-shell.view-search,
+.app-shell.view-graph,
+.app-shell.view-admin {
+  --glass-panel: rgba(255, 250, 240, 0.46);
+  --glass-panel-strong: rgba(255, 250, 240, 0.68);
+  --glass-panel-soft: rgba(255, 250, 240, 0.3);
+  --glass-border: rgba(20, 61, 43, 0.12);
+  --paper-readable: rgba(255, 250, 240, 0.82);
+}
+
+.app-shell.view-assistant .topbar,
+.app-shell.view-search .topbar,
+.app-shell.view-admin .topbar {
+  background: linear-gradient(90deg, rgba(255, 250, 240, 0.36), rgba(255, 250, 240, 0.08)) !important;
+  border-bottom-color: rgba(20, 61, 43, 0.06) !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(10px) saturate(1.02) !important;
+}
+
+.app-shell.view-graph .topbar {
+  background: linear-gradient(90deg, rgba(255, 250, 240, 0.26), rgba(255, 250, 240, 0.04)) !important;
+  border-bottom-color: rgba(20, 61, 43, 0.06) !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(8px) saturate(1.02) !important;
+}
+
+.app-shell.view-assistant .workspace,
+.app-shell.view-search .workspace,
+.app-shell.view-admin .workspace,
+.app-shell.view-graph .workspace {
+  background: linear-gradient(180deg, rgba(255, 250, 240, 0.03), rgba(255, 250, 240, 0.01)) !important;
+}
+
+.app-shell.view-assistant .assistant-layout,
+.app-shell.view-search .search-layout,
+.app-shell.view-admin .admin-layout {
+  background: transparent !important;
+}
+
+.app-shell.view-assistant .history-panel,
+.app-shell.view-assistant .chat-surface,
+.app-shell.view-assistant .thinking-panel.strong,
+.app-shell.view-search .search-filter-panel,
+.app-shell.view-search .search-main,
+.app-shell.view-search .search-side > section,
+.app-shell.view-admin .admin-hero,
+.app-shell.view-admin .admin-create,
+.app-shell.view-admin .admin-users {
+  border-color: var(--glass-border) !important;
+  background:
+    linear-gradient(180deg, var(--glass-panel), rgba(246, 239, 224, 0.26)) !important;
+  box-shadow:
+    0 24px 64px rgba(29, 37, 32, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.56) !important;
+  backdrop-filter: blur(12px) saturate(1.05) !important;
+}
+
+.app-shell.view-assistant .chat-surface {
+  background:
+    linear-gradient(180deg, rgba(255, 250, 240, 0.34), rgba(246, 239, 224, 0.18)) !important;
+}
+
+.app-shell.view-assistant .message,
+.app-shell.view-assistant .composer,
+.app-shell.view-assistant .history-strip,
+.app-shell.view-assistant .thread-item,
+.app-shell.view-assistant .thinking-log,
+.app-shell.view-search .search-box,
+.app-shell.view-search .facet-row,
+.app-shell.view-search .result-tools,
+.app-shell.view-search .result-card,
+.app-shell.view-search .detail-panel dl,
+.app-shell.view-admin .admin-form input,
+.app-shell.view-admin .admin-form select,
+.app-shell.view-admin .user-row {
+  background: var(--paper-readable) !important;
+  border-color: rgba(20, 61, 43, 0.13) !important;
+  backdrop-filter: blur(10px) saturate(1.04) !important;
+}
+
+.app-shell.view-assistant .message.assistant {
+  background: rgba(255, 250, 240, 0.78) !important;
+}
+
+.app-shell.view-assistant .message.user {
+  background: rgba(238, 246, 231, 0.76) !important;
+}
+
+.app-shell.view-search .result-card.active,
+.app-shell.view-search .sync-panel,
+.app-shell.view-search .detail-panel,
+.app-shell.view-admin .admin-hero {
+  background:
+    linear-gradient(180deg, rgba(255, 250, 240, 0.6), rgba(247, 240, 225, 0.36)) !important;
+}
+
+.app-shell.view-admin .admin-hero {
+  min-height: 112px !important;
+}
+
+.app-shell.view-admin .admin-users {
+  min-height: 420px !important;
+}
+
+.app-shell.view-graph .graph-toolbar {
+  background: linear-gradient(90deg, rgba(255, 250, 240, 0.22), rgba(255, 250, 240, 0.04)) !important;
+  border-color: rgba(255, 250, 240, 0.22) !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(8px) saturate(1.03) !important;
+}
+
+.app-shell.view-graph .graph-inspector {
+  background:
+    linear-gradient(180deg, rgba(255, 250, 240, 0.64), rgba(240, 235, 220, 0.44)) !important;
+  backdrop-filter: blur(10px) saturate(1.04) !important;
+}
+
+.app-shell.view-graph .graph-scene {
+  background:
+    linear-gradient(180deg, rgba(4, 52, 39, 0.58), rgba(5, 42, 34, 0.66)),
+    radial-gradient(circle at 55% 16%, rgba(255, 250, 240, 0.12), transparent 28%),
+    url("/images/workspace-tcm-vivid-bg.png") !important;
+  background-size: auto, auto, cover !important;
+  background-position: center, center, center !important;
+}
+
+.app-shell.view-assistant .ambient-image,
+.app-shell.view-search .ambient-image,
+.app-shell.view-admin .ambient-image {
+  opacity: 0.74 !important;
+  filter: saturate(1.06) contrast(1.02) brightness(1.02) !important;
+}
+
+.app-shell.view-graph .ambient-image {
+  opacity: 0.66 !important;
+  filter: saturate(1.02) contrast(1) brightness(0.98) !important;
+}
+
+/* Final topbar transparency pass: user and admin pages should not cover the moving background. */
+.app-shell.view-assistant .topbar,
+.app-shell.view-search .topbar,
+.app-shell.view-graph .topbar,
+.app-shell.view-admin .topbar {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+

@@ -92,3 +92,25 @@ def test_chat_threads_group_messages_and_update_focus(tmp_path):
     messages = store.get_thread_messages(user["id"], thread["id"])
     assert [item["role"] for item in messages] == ["user", "assistant"]
     assert messages[0]["thread_id"] == thread["id"]
+
+
+def test_user_roles_listing_and_delete_cascade(tmp_path):
+    store = PgMemoryStore(f"sqlite:///{tmp_path / 'test.db'}")
+    store.init_schema()
+
+    admin = store.create_user("root_admin", "secret123", role="admin")
+    user = store.create_user("managed_user", "secret123")
+    session = store.create_session(user["id"])
+    thread = store.create_chat_thread(user["id"], "测试对话", focus_entity="麻黄汤")
+    store.append_chat_message(user["id"], session["id"], "user", "麻黄汤是什么？", thread_id=thread["id"])
+    store.upsert_memory(user["id"], "preference", "关注禁忌")
+
+    users = store.list_users()
+    assert any(item["id"] == admin["id"] and item["role"] == "admin" for item in users)
+    assert any(item["id"] == user["id"] and item["message_count"] == 1 for item in users)
+    assert store.count_admins() >= 1
+
+    assert store.delete_user(user["id"]) is True
+    assert store.get_user_by_username("managed_user") is None
+    assert store.get_thread_messages(user["id"], thread["id"]) == []
+    assert store.get_memories(user["id"]) == []

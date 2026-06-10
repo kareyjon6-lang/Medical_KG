@@ -24,6 +24,13 @@ class AuthService:
         session = self.store.create_session(user["id"])
         return {"token": session["token"], "session_id": session["id"], "user": user}
 
+    def login_admin(self, username: str, password: str):
+        session = self.login(username, password)
+        if session["user"].get("role") != "admin":
+            self.store.revoke_session(session["token"])
+            raise AuthError("Administrator account required.")
+        return session
+
     def current_user(self, authorization: Optional[str]):
         token = bearer_token(authorization)
         if not token:

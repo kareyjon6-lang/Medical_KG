@@ -51,6 +51,12 @@ class AuthRequest(BaseModel):
     password: str = Field(..., min_length=6)
 
 
+class AdminUserRequest(BaseModel):
+    username: str = Field(..., min_length=2)
+    password: str = Field(..., min_length=6)
+    role: str = Field(default="user")
+
+
 class ChatThreadRequest(BaseModel):
     title: str = Field(default="新的对话", min_length=1)
     focus_entity: str = ""
@@ -77,10 +83,18 @@ async def login(request: AuthRequest):
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 
+@app.post("/api/auth/admin/login")
+async def admin_login(request: AuthRequest):
+    try:
+        return auth_service.login_admin(request.username, request.password)
+    except AuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
 @app.get("/api/auth/me")
 async def me(authorization: str = Header(default="")):
     user = require_user(authorization)
-    return {"user": {"id": user["id"], "username": user["username"]}}
+    return {"user": {"id": user["id"], "username": user["username"], "role": user.get("role", "user")}}
 
 
 @app.post("/api/auth/logout")
@@ -158,6 +172,37 @@ async def delete_chat_thread(thread_id: str, authorization: str = Header(default
 async def memory(authorization: str = Header(default=""), limit: int = Query(20, ge=1, le=100)):
     user = require_user(authorization)
     return {"items": memory_store.get_memories(user["id"], limit=limit)}
+
+
+@app.get("/api/admin/users")
+async def admin_users(authorization: str = Header(default=""), limit: int = Query(100, ge=1, le=500)):
+    require_admin(authorization)
+    return {"items": memory_store.list_users(limit=limit)}
+
+
+@app.post("/api/admin/users")
+async def admin_create_user(request: AdminUserRequest, authorization: str = Header(default="")):
+    require_admin(authorization)
+    try:
+        user = memory_store.create_user(request.username, request.password, role=request.role)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"user": user}
+
+
+@app.delete("/api/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, authorization: str = Header(default="")):
+    admin = require_admin(authorization)
+    if user_id == admin["id"]:
+        raise HTTPException(status_code=400, detail="Current administrator cannot be deleted.")
+    target = next((item for item in memory_store.list_users(limit=500) if item["id"] == user_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if target.get("role") == "admin" and memory_store.count_admins() <= 1:
+        raise HTTPException(status_code=400, detail="At least one administrator is required.")
+    if not memory_store.delete_user(user_id):
+        raise HTTPException(status_code=404, detail="User not found.")
+    return {"status": "ok"}
 
 
 @app.get("/api/search")
@@ -393,6 +438,13 @@ def require_user(authorization: str):
         return auth_service.current_user(authorization)
     except AuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+def require_admin(authorization: str):
+    user = require_user(authorization)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Administrator permission required.")
+    return user
 
 
 def require_thread(user_id: str, thread_id: str):

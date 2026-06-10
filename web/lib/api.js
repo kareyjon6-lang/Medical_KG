@@ -65,6 +65,11 @@ export async function login(username, password) {
 }
 
 
+export async function adminLogin(username, password) {
+  return authRequest("/api/auth/admin/login", username, password);
+}
+
+
 export async function register(username, password) {
   return authRequest("/api/auth/register", username, password);
 }
@@ -263,6 +268,42 @@ export async function fetchLongTermMemory(token, limit = 20) {
   });
   if (!response.ok) {
     throw new Error(`Memory request failed with ${response.status}`);
+  }
+  return response.json();
+}
+
+
+export async function fetchAdminUsers(token, limit = 100) {
+  const response = await fetch(buildApiUrl("/api/admin/users", { limit }), {
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    throw new Error(`Admin users request failed with ${response.status}`);
+  }
+  return response.json();
+}
+
+
+export async function createAdminUser(token, username, password, role = "user") {
+  const response = await fetch(buildApiUrl("/api/admin/users"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(token) },
+    body: JSON.stringify({ username, password, role }),
+  });
+  if (!response.ok) {
+    throw new Error(`Create admin user request failed with ${response.status}`);
+  }
+  return response.json();
+}
+
+
+export async function deleteAdminUser(token, userId) {
+  const response = await fetch(buildApiUrl(`/api/admin/users/${encodeURIComponent(userId)}`), {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    throw new Error(`Delete admin user request failed with ${response.status}`);
   }
   return response.json();
 }

@@ -180,3 +180,41 @@ def test_cors_origins_include_deployed_frontend_env(monkeypatch, tmp_path):
     )
 
     assert response.headers["access-control-allow-origin"] == "https://tcm.example.com"
+
+
+def test_admin_login_and_user_management_routes(monkeypatch, tmp_path):
+    monkeypatch.setenv("TCM_ADMIN_USERNAME", "admin")
+    monkeypatch.setenv("TCM_ADMIN_PASSWORD", "admin123")
+    main = load_main_with_sqlite(monkeypatch, tmp_path)
+    client = TestClient(main.app)
+
+    ordinary = client.post("/api/auth/register", json={"username": "ordinary_user", "password": "secret123"}).json()
+    ordinary_headers = {"Authorization": f"Bearer {ordinary['token']}"}
+    assert client.get("/api/admin/users", headers=ordinary_headers).status_code == 403
+
+    failed_admin = client.post("/api/auth/admin/login", json={"username": "ordinary_user", "password": "secret123"})
+    assert failed_admin.status_code == 401
+
+    admin = client.post("/api/auth/admin/login", json={"username": "admin", "password": "admin123"})
+    assert admin.status_code == 200
+    assert admin.json()["user"]["role"] == "admin"
+    admin_headers = {"Authorization": f"Bearer {admin.json()['token']}"}
+
+    created = client.post(
+        "/api/admin/users",
+        json={"username": "created_by_admin", "password": "secret123", "role": "user"},
+        headers=admin_headers,
+    )
+    assert created.status_code == 200
+    created_user = created.json()["user"]
+    assert created_user["role"] == "user"
+
+    users = client.get("/api/admin/users", headers=admin_headers).json()["items"]
+    assert any(item["username"] == "created_by_admin" for item in users)
+
+    assert client.delete(f"/api/admin/users/{created_user['id']}", headers=admin_headers).status_code == 200
+    users_after_delete = client.get("/api/admin/users", headers=admin_headers).json()["items"]
+    assert not any(item["username"] == "created_by_admin" for item in users_after_delete)
+
+    admin_id = admin.json()["user"]["id"]
+    assert client.delete(f"/api/admin/users/{admin_id}", headers=admin_headers).status_code == 400

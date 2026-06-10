@@ -14,6 +14,545 @@
   --soft-shadow: 0 10px 28px rgba(29, 37, 32, 0.1);
 }
 
+/* Dynamic TCM landing entry */
+.landing-shell {
+  position: relative;
+  min-height: 100dvh;
+  overflow: hidden;
+  isolation: isolate;
+  color: var(--ink);
+  background: #f4efe3;
+}
+
+.landing-shell::before,
+.landing-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.landing-shell::before {
+  z-index: -2;
+  background:
+    linear-gradient(112deg, transparent 18%, rgba(255, 250, 240, 0.38) 38%, transparent 58%),
+    linear-gradient(90deg, rgba(255, 250, 240, 0.05) 0%, rgba(255, 250, 240, 0.28) 48%, rgba(255, 250, 240, 0.04) 100%);
+  transform: translateX(-24%);
+  animation: landingSweep 11s ease-in-out infinite;
+}
+
+.landing-shell::after {
+  z-index: -1;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 250, 240, 0.22), transparent),
+    radial-gradient(circle at 24% 62%, rgba(197, 154, 74, 0.08), transparent 28%);
+  mix-blend-mode: screen;
+  opacity: 0.65;
+}
+
+.landing-image-bg {
+  position: absolute;
+  inset: -3%;
+  z-index: -3;
+  background:
+    linear-gradient(90deg, rgba(244, 239, 227, 0.94) 0%, rgba(244, 239, 227, 0.68) 48%, rgba(244, 239, 227, 0.28) 100%),
+    url("/images/landing-tcm-dynamic-bg.png");
+  background-size: cover;
+  background-position: center;
+  animation: landingDrift 22s ease-in-out infinite alternate;
+}
+
+.landing-paper {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(circle at 24% 24%, rgba(255, 250, 240, 0.62), transparent 26%),
+    linear-gradient(90deg, rgba(255, 250, 240, 0.54) 1px, transparent 1px),
+    linear-gradient(rgba(20, 61, 43, 0.035) 1px, transparent 1px);
+  background-size: auto, 148px 100%, 100% 132px;
+  mix-blend-mode: soft-light;
+}
+
+.landing-mist {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.landing-mist .mist {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(22px);
+  background: radial-gradient(circle, rgba(255, 250, 240, 0.72), rgba(255, 250, 240, 0.1) 58%, transparent 72%);
+  animation: mistFloat 16s ease-in-out infinite;
+}
+
+.landing-mist .mist-a {
+  left: -8%;
+  bottom: -10%;
+  width: 420px;
+  height: 260px;
+}
+
+.landing-mist .mist-b {
+  left: 28%;
+  top: 12%;
+  width: 340px;
+  height: 220px;
+  animation-delay: -5s;
+}
+
+.landing-mist .mist-c {
+  right: 8%;
+  bottom: 14%;
+  width: 300px;
+  height: 200px;
+  animation-delay: -9s;
+}
+
+.landing-graph {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.94;
+}
+
+.landing-graph .node,
+.landing-graph .line,
+.landing-graph .spark {
+  position: absolute;
+  display: block;
+}
+
+.landing-graph .node {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(20, 61, 43, 0.52);
+  box-shadow: 0 0 0 12px rgba(20, 61, 43, 0.08);
+  animation: nodePulse 2.9s ease-in-out infinite;
+}
+
+.landing-graph .node::after {
+  content: "";
+  position: absolute;
+  inset: -12px;
+  border: 1px solid rgba(20, 61, 43, 0.22);
+  border-radius: 999px;
+  animation: nodeRipple 2.9s ease-out infinite;
+}
+
+.landing-graph .node-a { left: 14%; top: 23%; animation-delay: 0s; }
+.landing-graph .node-b { left: 25%; top: 39%; animation-delay: 0.7s; }
+.landing-graph .node-c { left: 38%; top: 28%; animation-delay: 1.2s; }
+.landing-graph .node-d { left: 47%; top: 50%; animation-delay: 1.8s; }
+
+.landing-graph .line {
+  height: 2px;
+  transform-origin: left center;
+  background: linear-gradient(90deg, rgba(20, 61, 43, 0.06), rgba(20, 61, 43, 0.22) 18%, rgba(197, 154, 74, 0.54) 52%, rgba(20, 61, 43, 0.08));
+  background-size: 220% 100%;
+  animation: lineTravel 4.8s linear infinite;
+}
+
+.landing-graph .line-a { left: 15%; top: 25%; width: 210px; transform: rotate(31deg); }
+.landing-graph .line-b { left: 25%; top: 40%; width: 210px; transform: rotate(-23deg); animation-delay: 0.9s; }
+.landing-graph .line-c { left: 38%; top: 30%; width: 190px; transform: rotate(40deg); animation-delay: 1.5s; }
+
+.landing-graph .spark {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 250, 240, 0.96), rgba(197, 154, 74, 0.84) 45%, rgba(197, 154, 74, 0));
+  box-shadow: 0 0 18px rgba(197, 154, 74, 0.58);
+}
+
+.landing-graph .spark-a {
+  left: 15%;
+  top: 24.8%;
+  animation: sparkRunA 5.4s linear infinite;
+}
+
+.landing-graph .spark-b {
+  left: 25%;
+  top: 39.6%;
+  animation: sparkRunB 5.7s linear infinite;
+  animation-delay: -1.6s;
+}
+
+.landing-graph .spark-c {
+  left: 38%;
+  top: 29.6%;
+  animation: sparkRunC 5.1s linear infinite;
+  animation-delay: -2.4s;
+}
+
+.landing-login-button {
+  position: fixed;
+  top: 28px;
+  right: 34px;
+  z-index: 3;
+  min-width: 96px;
+  height: 44px;
+  border: 1px solid rgba(20, 61, 43, 0.22);
+  border-radius: 8px;
+  color: var(--paper-strong);
+  background: linear-gradient(135deg, #0f4a34, var(--ink));
+  box-shadow: 0 14px 34px rgba(20, 61, 43, 0.16);
+  font-weight: 900;
+  animation: loginBreath 2.8s ease-in-out infinite;
+}
+
+.landing-login-button:hover {
+  transform: translateY(-1px);
+}
+
+.landing-hero {
+  min-height: 100dvh;
+  width: min(760px, calc(100% - 44px));
+  padding-left: clamp(28px, 8vw, 116px);
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 14px;
+  animation: heroRise 1.2s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.landing-hero p,
+.landing-hero h1,
+.landing-hero strong {
+  margin: 0;
+}
+
+.landing-hero p {
+  color: var(--cinnabar);
+  font-size: 17px;
+  font-weight: 900;
+  animation: copyFade 1.4s ease-out both;
+  animation-delay: 0.2s;
+}
+
+.landing-hero h1 {
+  font-family: "KaiTi", "STKaiti", "Songti SC", "Microsoft YaHei", serif;
+  font-size: clamp(76px, 10vw, 140px);
+  line-height: 0.96;
+  color: var(--ink);
+  text-shadow: 0 14px 44px rgba(20, 61, 43, 0.13);
+  animation: titleInk 1.5s cubic-bezier(.2, .9, .2, 1) both, heroFloat 4.4s ease-in-out 1.4s infinite;
+}
+
+.landing-hero strong {
+  border-left: 4px solid var(--cinnabar);
+  padding-left: 14px;
+  color: rgba(20, 61, 43, 0.72);
+  font-size: clamp(18px, 2vw, 26px);
+  font-weight: 900;
+  animation: copyFade 1.6s ease-out both;
+  animation-delay: 0.4s;
+}
+
+.login-panel-v2 h1 {
+  max-width: none;
+  font-size: clamp(44px, 5vw, 62px);
+}
+
+.login-panel-v2 .login-form {
+  margin-top: 22px;
+}
+
+@keyframes landingDrift {
+  from { transform: scale(1.02) translate3d(-0.8%, -0.5%, 0); }
+  to { transform: scale(1.06) translate3d(1.1%, 0.8%, 0); }
+}
+
+@keyframes landingSweep {
+  0% { transform: translateX(-28%); opacity: 0.2; }
+  50% { opacity: 0.72; }
+  100% { transform: translateX(26%); opacity: 0.24; }
+}
+
+@keyframes mistFloat {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.34; }
+  50% { transform: translate3d(22px, -14px, 0) scale(1.08); opacity: 0.56; }
+}
+
+@keyframes nodePulse {
+  0%, 100% { transform: scale(0.82); opacity: 0.5; }
+  50% { transform: scale(1.26); opacity: 1; }
+}
+
+@keyframes nodeRipple {
+  0% { transform: scale(0.72); opacity: 0.62; }
+  100% { transform: scale(1.42); opacity: 0; }
+}
+
+@keyframes lineTravel {
+  0% { background-position: 100% 50%; opacity: 0.2; }
+  50% { opacity: 0.86; }
+  100% { background-position: -100% 50%; opacity: 0.24; }
+}
+
+@keyframes sparkRunA {
+  0% { transform: translate3d(0, 0, 0) scale(0.7); opacity: 0; }
+  12% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translate3d(176px, 106px, 0) scale(1); opacity: 0; }
+}
+
+@keyframes sparkRunB {
+  0% { transform: translate3d(0, 0, 0) scale(0.7); opacity: 0; }
+  14% { opacity: 1; }
+  82% { opacity: 1; }
+  100% { transform: translate3d(177px, -75px, 0) scale(1); opacity: 0; }
+}
+
+@keyframes sparkRunC {
+  0% { transform: translate3d(0, 0, 0) scale(0.7); opacity: 0; }
+  14% { opacity: 1; }
+  82% { opacity: 1; }
+  100% { transform: translate3d(145px, 121px, 0) scale(1); opacity: 0; }
+}
+
+@keyframes loginBreath {
+  0%, 100% { transform: translateY(0) scale(1); box-shadow: 0 14px 34px rgba(20, 61, 43, 0.16); }
+  50% { transform: translateY(-2px) scale(1.03); box-shadow: 0 18px 40px rgba(20, 61, 43, 0.22); }
+}
+
+@keyframes heroRise {
+  0% { transform: translate3d(0, 24px, 0); opacity: 0; }
+  100% { transform: translate3d(0, 0, 0); opacity: 1; }
+}
+
+@keyframes sealDrop {
+  0% { transform: translate3d(0, -18px, 0) rotate(-8deg); opacity: 0; }
+  100% { transform: translate3d(0, 0, 0) rotate(0); opacity: 1; }
+}
+
+@keyframes titleInk {
+  0% { transform: translate3d(-24px, 0, 0) scale(0.96); opacity: 0; filter: blur(8px); }
+  100% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; filter: blur(0); }
+}
+
+@keyframes heroFloat {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -6px, 0); }
+}
+
+@keyframes copyFade {
+  0% { transform: translate3d(0, 14px, 0); opacity: 0; }
+  100% { transform: translate3d(0, 0, 0); opacity: 1; }
+}
+
+@media (max-width: 760px) {
+  .landing-login-button {
+    top: 18px;
+    right: 18px;
+  }
+
+  .landing-hero {
+    width: 100%;
+    padding: 96px 28px 48px;
+  }
+
+  .landing-hero h1 {
+    font-size: clamp(62px, 18vw, 98px);
+  }
+
+  .landing-graph {
+    opacity: 0.66;
+  }
+}
+
+/* Final sidebar/auth refinement for the four main workbench views. */
+.auth-restore-shell {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-restore-card {
+  position: relative;
+  z-index: 1;
+  padding: 18px 26px;
+  border: 1px solid rgba(20, 61, 43, 0.16);
+  border-radius: 8px;
+  color: #143d2b;
+  background: rgba(255, 250, 240, 0.82);
+  box-shadow: 0 18px 42px rgba(20, 61, 43, 0.14);
+  font-family: STKaiti, KaiTi, "Microsoft YaHei", sans-serif;
+  font-size: 18px;
+}
+
+@media (min-width: 861px) {
+  .app-shell {
+    grid-template-columns: 122px minmax(0, 1fr) !important;
+  }
+
+  .sidebar {
+    height: 100vh !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    box-sizing: border-box;
+    display: grid !important;
+    grid-template-rows: 136px minmax(0, 1fr) 48px !important;
+    gap: 0 !important;
+    padding: 26px 7px 16px !important;
+    overflow: hidden !important;
+    border-right: 0 !important;
+    background:
+      linear-gradient(180deg, rgba(0, 66, 47, 0.74), rgba(0, 38, 29, 0.98)),
+      url("/images/sidebar-herbal-ink-v2.png"),
+      url("/images/sidebar-herbal-ink.png") !important;
+    background-size: cover, cover, cover !important;
+    background-position: center top, center top, center top !important;
+    box-shadow: inset -1px 0 0 rgba(255, 250, 240, 0.08) !important;
+  }
+
+  .sidebar::after {
+    content: "" !important;
+    position: absolute !important;
+    inset: 0 !important;
+    pointer-events: none !important;
+    background:
+      radial-gradient(circle at 48% 9%, rgba(255, 250, 240, 0.1), transparent 18%),
+      linear-gradient(180deg, transparent 0 76%, rgba(0, 24, 18, 0.48)) !important;
+    opacity: 0.5 !important;
+  }
+
+  .brand,
+  .tabs,
+  .logout-button {
+    position: relative !important;
+    z-index: 1 !important;
+  }
+
+  .brand {
+    min-height: 0 !important;
+    height: 136px !important;
+    display: grid !important;
+    place-items: start center !important;
+    padding-top: 2px !important;
+    gap: 0 !important;
+    text-align: center !important;
+  }
+
+  .brand strong,
+  .brand > span:not(.brand-mark) {
+    display: none !important;
+  }
+
+  .brand-mark {
+    position: relative !important;
+    width: 86px !important;
+    height: 120px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    display: grid !important;
+    place-items: start center !important;
+    background: transparent !important;
+    color: #fffaf0 !important;
+    text-shadow: 0 4px 18px rgba(0, 0, 0, 0.36) !important;
+  }
+
+  .brand-mark b {
+    display: block !important;
+    font-family: STKaiti, KaiTi, "Source Han Serif SC", serif !important;
+    font-size: 38px !important;
+    font-weight: 900 !important;
+    font-style: normal !important;
+    line-height: 0.94 !important;
+    letter-spacing: 0 !important;
+    writing-mode: vertical-rl !important;
+  }
+
+  .brand-mark i {
+    position: absolute !important;
+    left: 5px !important;
+    top: 26px !important;
+    margin: 0 !important;
+    padding: 2px 3px !important;
+    border-radius: 4px !important;
+    color: #fff7e8 !important;
+    background: #b9472e !important;
+    font-size: 10px !important;
+    font-style: normal !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+    writing-mode: horizontal-tb !important;
+  }
+
+  .tabs {
+    min-height: 0 !important;
+    display: grid !important;
+    align-content: start !important;
+    justify-items: center !important;
+    gap: 13px !important;
+    padding-top: 20px !important;
+    overflow: visible !important;
+  }
+
+  .tab {
+    width: 96px !important;
+    height: 76px !important;
+    margin: 0 auto !important;
+    padding: 7px 0 8px !important;
+    border-radius: 8px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 7px !important;
+    color: rgba(255, 250, 240, 0.78) !important;
+    background: transparent !important;
+    font-family: STKaiti, KaiTi, "Microsoft YaHei", sans-serif !important;
+    font-size: 18px !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+  }
+
+  .tab svg {
+    width: 28px !important;
+    height: 28px !important;
+    stroke-width: 1.9 !important;
+  }
+
+  .tab.active {
+    color: #fffaf0 !important;
+    background: rgba(255, 250, 240, 0.14) !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 250, 240, 0.22),
+      0 14px 34px rgba(0, 0, 0, 0.22) !important;
+  }
+
+  .tab:hover {
+    transform: translateY(-1px) !important;
+  }
+
+  .logout-button {
+    align-self: end !important;
+    width: 108px !important;
+    min-height: 44px !important;
+    height: 44px !important;
+    margin: 0 auto !important;
+    padding: 0 12px !important;
+    border-color: rgba(255, 250, 240, 0.24) !important;
+    color: rgba(255, 250, 240, 0.92) !important;
+    background: rgba(255, 250, 240, 0.09) !important;
+    font-size: 15px !important;
+  }
+
+  .logout-button svg {
+    width: 17px !important;
+    height: 17px !important;
+  }
+}
+
 /* Current requested refinement: figure-1 rail, real assistant history controls, no top-right action cluster. */
 @media (min-width: 861px) {
   .app-shell {
@@ -258,6 +797,192 @@
 
   .history-strip button:disabled {
     opacity: 0.5;
+  }
+}
+
+/* Final sidebar/auth refinement for the four main workbench views. Keep last. */
+.auth-restore-shell {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-restore-card {
+  position: relative;
+  z-index: 1;
+  padding: 18px 26px;
+  border: 1px solid rgba(20, 61, 43, 0.16);
+  border-radius: 8px;
+  color: #143d2b;
+  background: rgba(255, 250, 240, 0.82);
+  box-shadow: 0 18px 42px rgba(20, 61, 43, 0.14);
+  font-family: STKaiti, KaiTi, "Microsoft YaHei", sans-serif;
+  font-size: 18px;
+}
+
+@media (min-width: 861px) {
+  .app-shell {
+    grid-template-columns: 122px minmax(0, 1fr) !important;
+  }
+
+  .sidebar {
+    height: 100vh !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    box-sizing: border-box;
+    display: grid !important;
+    grid-template-rows: 136px minmax(0, 1fr) 48px !important;
+    gap: 0 !important;
+    padding: 26px 7px 16px !important;
+    overflow: hidden !important;
+    border-right: 0 !important;
+    background:
+      linear-gradient(180deg, rgba(0, 66, 47, 0.74), rgba(0, 38, 29, 0.98)),
+      url("/images/sidebar-herbal-ink-v2.png"),
+      url("/images/sidebar-herbal-ink.png") !important;
+    background-size: cover, cover, cover !important;
+    background-position: center top, center top, center top !important;
+    box-shadow: inset -1px 0 0 rgba(255, 250, 240, 0.08) !important;
+  }
+
+  .sidebar::after {
+    content: "" !important;
+    position: absolute !important;
+    inset: 0 !important;
+    pointer-events: none !important;
+    background:
+      radial-gradient(circle at 48% 9%, rgba(255, 250, 240, 0.1), transparent 18%),
+      linear-gradient(180deg, transparent 0 76%, rgba(0, 24, 18, 0.48)) !important;
+    opacity: 0.5 !important;
+  }
+
+  .brand,
+  .tabs,
+  .logout-button {
+    position: relative !important;
+    z-index: 1 !important;
+  }
+
+  .brand {
+    min-height: 0 !important;
+    height: 136px !important;
+    display: grid !important;
+    place-items: start center !important;
+    padding-top: 2px !important;
+    gap: 0 !important;
+    text-align: center !important;
+  }
+
+  .brand strong,
+  .brand > span:not(.brand-mark) {
+    display: none !important;
+  }
+
+  .brand-mark {
+    position: relative !important;
+    width: 86px !important;
+    height: 120px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    display: grid !important;
+    place-items: start center !important;
+    background: transparent !important;
+    color: #fffaf0 !important;
+    text-shadow: 0 4px 18px rgba(0, 0, 0, 0.36) !important;
+  }
+
+  .brand-mark b {
+    display: block !important;
+    font-family: STKaiti, KaiTi, "Source Han Serif SC", serif !important;
+    font-size: 38px !important;
+    font-weight: 900 !important;
+    font-style: normal !important;
+    line-height: 0.94 !important;
+    letter-spacing: 0 !important;
+    writing-mode: vertical-rl !important;
+  }
+
+  .brand-mark i {
+    position: absolute !important;
+    left: 5px !important;
+    top: 26px !important;
+    margin: 0 !important;
+    padding: 2px 3px !important;
+    border-radius: 4px !important;
+    color: #fff7e8 !important;
+    background: #b9472e !important;
+    font-size: 10px !important;
+    font-style: normal !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+    writing-mode: horizontal-tb !important;
+  }
+
+  .tabs {
+    min-height: 0 !important;
+    display: grid !important;
+    align-content: start !important;
+    justify-items: center !important;
+    gap: 13px !important;
+    padding-top: 20px !important;
+    overflow: visible !important;
+  }
+
+  .tab {
+    width: 96px !important;
+    height: 76px !important;
+    margin: 0 auto !important;
+    padding: 7px 0 8px !important;
+    border-radius: 8px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 7px !important;
+    color: rgba(255, 250, 240, 0.78) !important;
+    background: transparent !important;
+    font-family: STKaiti, KaiTi, "Microsoft YaHei", sans-serif !important;
+    font-size: 18px !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+  }
+
+  .tab svg {
+    width: 28px !important;
+    height: 28px !important;
+    stroke-width: 1.9 !important;
+  }
+
+  .tab.active {
+    color: #fffaf0 !important;
+    background: rgba(255, 250, 240, 0.14) !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 250, 240, 0.22),
+      0 14px 34px rgba(0, 0, 0, 0.22) !important;
+  }
+
+  .tab:hover {
+    transform: translateY(-1px) !important;
+  }
+
+  .logout-button {
+    align-self: end !important;
+    width: 108px !important;
+    min-height: 44px !important;
+    height: 44px !important;
+    margin: 0 auto !important;
+    padding: 0 12px !important;
+    border-color: rgba(255, 250, 240, 0.24) !important;
+    color: rgba(255, 250, 240, 0.92) !important;
+    background: rgba(255, 250, 240, 0.09) !important;
+    font-size: 15px !important;
+  }
+
+  .logout-button svg {
+    width: 17px !important;
+    height: 17px !important;
   }
 }
 
@@ -2087,6 +2812,277 @@ h2 {
   line-height: 1.55;
 }
 
+.thinking-log p {
+  min-width: max-content;
+  white-space: pre;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
+.login-shell-v2 {
+  background:
+    linear-gradient(90deg, rgba(244, 239, 227, 0.94), rgba(244, 239, 227, 0.6)),
+    url("/images/login-herbal-graph-bg.png"),
+    radial-gradient(circle at 50% 18%, rgba(255, 250, 240, 0.72), transparent 22%),
+    radial-gradient(circle at 76% 72%, rgba(197, 154, 74, 0.12), transparent 24%),
+    linear-gradient(rgba(244, 239, 227, 0.56), rgba(244, 239, 227, 0.72)),
+    linear-gradient(90deg, rgba(20, 61, 43, 0.055) 1px, transparent 1px),
+    linear-gradient(rgba(20, 61, 43, 0.045) 1px, transparent 1px);
+  background-size: auto, cover, auto, auto, auto, 142px 100%, 100% 132px;
+  background-position: center, center, center, center, center, center, center;
+}
+
+.login-image-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(244, 239, 227, 0.96) 0%, rgba(244, 239, 227, 0.86) 42%, rgba(244, 239, 227, 0.42) 100%),
+    url("/images/login-herbal-graph-bg.png");
+  background-size: cover;
+  background-position: center;
+  filter: saturate(0.96);
+}
+
+.login-panel-v2 {
+  position: relative;
+  width: min(590px, 100%);
+  padding: clamp(32px, 5vw, 56px);
+  background:
+    linear-gradient(180deg, rgba(255, 250, 240, 0.94), rgba(248, 241, 226, 0.9)),
+    url("/images/tcm-kg-ambient.png");
+  background-size: auto, 840px auto;
+  background-position: center, right bottom -260px;
+  box-shadow: 0 28px 90px rgba(20, 61, 43, 0.16), 0 1px 0 rgba(255, 250, 240, 0.84) inset;
+}
+
+.login-panel-v2 h1 {
+  max-width: 420px;
+  font-family: "KaiTi", "STKaiti", "Songti SC", "Microsoft YaHei", serif;
+  font-size: clamp(46px, 5.2vw, 68px);
+  line-height: 1.08;
+  color: var(--ink);
+}
+
+.login-kind-switch {
+  margin-top: 26px;
+  border: 1px solid rgba(20, 61, 43, 0.16);
+  border-radius: 8px;
+  padding: 4px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  background: rgba(244, 239, 227, 0.76);
+}
+
+.login-kind-switch button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  color: rgba(20, 61, 43, 0.72);
+  background: transparent;
+  font-weight: 900;
+}
+
+.login-kind-switch button.active {
+  color: var(--paper-strong);
+  background: linear-gradient(135deg, #0f4a34, var(--ink));
+  box-shadow: 0 8px 18px rgba(20, 61, 43, 0.16);
+}
+
+.login-panel-v2 .login-form input:focus,
+.admin-form input:focus,
+.admin-form select:focus {
+  border-color: rgba(20, 61, 43, 0.5);
+  box-shadow: 0 0 0 3px rgba(78, 143, 90, 0.14);
+}
+
+.login-panel-v2 .login-form button:hover,
+.admin-form button:hover,
+.session-card button:hover,
+.mode-switch.compact:hover {
+  transform: translateY(-1px);
+}
+
+.session-card {
+  margin-top: 14px;
+  border: 1px solid rgba(20, 61, 43, 0.14);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(200, 216, 184, 0.24);
+  color: rgba(20, 61, 43, 0.78);
+  font-size: 13px;
+}
+
+.session-card button,
+.mode-switch.compact {
+  min-height: 32px;
+  border: 1px solid rgba(20, 61, 43, 0.18);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--ink);
+  background: rgba(255, 250, 240, 0.82);
+}
+
+.admin-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px;
+}
+
+.admin-hero,
+.admin-create,
+.admin-users {
+  border: 1px solid rgba(20, 61, 43, 0.14);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 240, 0.9), rgba(246, 238, 221, 0.82)),
+    url("/images/tcm-kg-ambient.png");
+  background-size: auto, 780px auto;
+  background-position: center, right bottom -220px;
+  backdrop-filter: blur(22px);
+  box-shadow: var(--soft-shadow);
+}
+
+.admin-hero {
+  grid-column: 1 / -1;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.admin-hero h2 {
+  font-family: "KaiTi", "STKaiti", "Songti SC", "Microsoft YaHei", serif;
+  font-size: clamp(28px, 3vw, 44px);
+}
+
+.admin-hero p {
+  margin-top: 8px;
+  color: rgba(29, 37, 32, 0.68);
+  line-height: 1.7;
+}
+
+.admin-stats {
+  display: flex;
+  gap: 10px;
+}
+
+.admin-stats span {
+  min-height: 38px;
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--paper-strong);
+  background: var(--ink);
+  font-weight: 900;
+}
+
+.admin-create,
+.admin-users {
+  min-height: 0;
+  padding: 18px;
+}
+
+.admin-form {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.admin-form label {
+  display: grid;
+  gap: 7px;
+  color: rgba(29, 37, 32, 0.7);
+  font-weight: 800;
+}
+
+.admin-form input,
+.admin-form select {
+  height: 44px;
+  border: 1px solid rgba(20, 61, 43, 0.18);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--charcoal);
+  background: var(--paper-strong);
+}
+
+.admin-form button,
+.user-row button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--paper-strong);
+  background: var(--ink);
+  font-weight: 900;
+}
+
+.admin-status {
+  margin-top: 14px;
+  color: var(--cinnabar);
+  font-weight: 800;
+}
+
+.admin-users {
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+}
+
+.user-table {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.user-row {
+  border: 1px solid rgba(20, 61, 43, 0.12);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 0.8fr) 72px;
+  align-items: center;
+  gap: 12px;
+  background: rgba(244, 239, 227, 0.56);
+}
+
+.user-row strong,
+.user-row span {
+  display: block;
+}
+
+.user-row span,
+.user-row small {
+  color: rgba(29, 37, 32, 0.62);
+}
+
+.user-row button {
+  background: var(--cinnabar);
+}
+
+.user-row button:disabled {
+  color: rgba(29, 37, 32, 0.52);
+  background: rgba(20, 61, 43, 0.12);
+}
+
+.graph-depth-help {
+  max-width: 280px;
+  color: rgba(20, 61, 43, 0.68);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
 .search-main {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -3905,4 +4901,175 @@ dd {
   .history-strip button:disabled {
     opacity: 0.5;
   }
+}
+
+/* Absolute final sidebar override. Keep this at EOF. */
+@media (min-width: 861px) {
+  .app-shell {
+    grid-template-columns: 122px minmax(0, 1fr) !important;
+  }
+
+  .sidebar {
+    height: 100vh !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    box-sizing: border-box !important;
+    display: grid !important;
+    grid-template-rows: 136px minmax(0, 1fr) 48px !important;
+    gap: 0 !important;
+    padding: 26px 7px 16px !important;
+    overflow: hidden !important;
+    border-right: 0 !important;
+    background: linear-gradient(180deg, rgba(0, 66, 47, 0.74), rgba(0, 38, 29, 0.98)), url("/images/sidebar-herbal-ink-v2.png"), url("/images/sidebar-herbal-ink.png") !important;
+    background-size: cover, cover, cover !important;
+    background-position: center top, center top, center top !important;
+    box-shadow: inset -1px 0 0 rgba(255, 250, 240, 0.08) !important;
+  }
+
+  .sidebar::after {
+    content: "" !important;
+    position: absolute !important;
+    inset: 0 !important;
+    pointer-events: none !important;
+    background: radial-gradient(circle at 48% 9%, rgba(255, 250, 240, 0.1), transparent 18%), linear-gradient(180deg, transparent 0 76%, rgba(0, 24, 18, 0.48)) !important;
+    opacity: 0.5 !important;
+  }
+
+  .brand,
+  .tabs,
+  .logout-button {
+    position: relative !important;
+    z-index: 1 !important;
+  }
+
+  .brand {
+    min-height: 0 !important;
+    height: 136px !important;
+    display: grid !important;
+    place-items: start center !important;
+    padding-top: 2px !important;
+    gap: 0 !important;
+    text-align: center !important;
+  }
+
+  .brand strong,
+  .brand > span:not(.brand-mark) {
+    display: none !important;
+  }
+
+  .brand-mark {
+    position: relative !important;
+    width: 86px !important;
+    height: 120px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    display: grid !important;
+    place-items: start center !important;
+    background: transparent !important;
+    color: #fffaf0 !important;
+    text-shadow: 0 4px 18px rgba(0, 0, 0, 0.36) !important;
+  }
+
+  .brand-mark b {
+    display: block !important;
+    font-family: STKaiti, KaiTi, "Source Han Serif SC", serif !important;
+    font-size: 38px !important;
+    font-weight: 900 !important;
+    font-style: normal !important;
+    line-height: 0.94 !important;
+    letter-spacing: 0 !important;
+    writing-mode: vertical-rl !important;
+  }
+
+  .brand-mark i {
+    position: absolute !important;
+    left: 5px !important;
+    top: 26px !important;
+    margin: 0 !important;
+    padding: 2px 3px !important;
+    border-radius: 4px !important;
+    color: #fff7e8 !important;
+    background: #b9472e !important;
+    font-size: 10px !important;
+    font-style: normal !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+    writing-mode: horizontal-tb !important;
+  }
+
+  .tabs {
+    min-height: 0 !important;
+    display: grid !important;
+    align-content: start !important;
+    justify-items: center !important;
+    gap: 13px !important;
+    padding-top: 20px !important;
+    overflow: visible !important;
+  }
+
+  .tab {
+    width: 96px !important;
+    height: 76px !important;
+    margin: 0 auto !important;
+    padding: 7px 0 8px !important;
+    border-radius: 8px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 7px !important;
+    color: rgba(255, 250, 240, 0.78) !important;
+    background: transparent !important;
+    font-family: STKaiti, KaiTi, "Microsoft YaHei", sans-serif !important;
+    font-size: 18px !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+  }
+
+  .tab svg {
+    width: 28px !important;
+    height: 28px !important;
+    stroke-width: 1.9 !important;
+  }
+
+  .tab.active {
+    color: #fffaf0 !important;
+    background: rgba(255, 250, 240, 0.14) !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 250, 240, 0.22), 0 14px 34px rgba(0, 0, 0, 0.22) !important;
+  }
+
+  .tab:hover {
+    transform: translateY(-1px) !important;
+  }
+
+  .logout-button {
+    align-self: end !important;
+    width: 108px !important;
+    min-height: 44px !important;
+    height: 44px !important;
+    margin: 0 auto !important;
+    padding: 0 12px !important;
+    border-color: rgba(255, 250, 240, 0.24) !important;
+    color: rgba(255, 250, 240, 0.92) !important;
+    background: rgba(255, 250, 240, 0.09) !important;
+    font-size: 15px !important;
+  }
+
+  .logout-button svg {
+    width: 17px !important;
+    height: 17px !important;
+  }
+}
+
+/* Topbar transparency safety net: keep every app header fully transparent. */
+.app-shell.view-assistant .topbar,
+.app-shell.view-search .topbar,
+.app-shell.view-graph .topbar,
+.app-shell.view-admin .topbar {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
 }
