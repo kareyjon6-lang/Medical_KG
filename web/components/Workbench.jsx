@@ -27,12 +27,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   adminLogin,
+  cancelChatJob,
   clearThreadMessages,
   createAdminUser,
   createChatThread,
   deleteAdminUser,
   deleteChatThread,
   fetchAdminUsers,
+  fetchChatJob,
   fetchChatThreads,
   fetchKnowledgeGraph,
   fetchMe,
@@ -101,16 +103,32 @@ const authRuntime = {
 const anonymousRuntimeKey = "anonymous";
 const chatRuntimeStore = new Map();
 
+function cloneDefaultMessages() {
+  return defaultMessages.map((message) => ({ ...message }));
+}
+
+function createThreadRuntimeState(messages = cloneDefaultMessages(), loaded = false) {
+  return {
+    abortController: null,
+    activeStreamToken: null,
+    jobId: "",
+    loaded,
+    loading: false,
+    messages,
+    progress: 0,
+    requestId: 0,
+    status: "idle",
+    thoughts: [],
+    unread: false,
+  };
+}
+
 function createChatRuntime() {
   return {
     activeThreadId: "",
     activeView: "assistant",
-    loading: false,
-    messages: defaultMessages,
-    progress: 0,
     subscribers: new Set(),
-    thoughts: [],
-    unread: false,
+    threads: {},
   };
 }
 
@@ -128,31 +146,68 @@ function getChatRuntime(key = anonymousRuntimeKey) {
 }
 
 function snapshotChatRuntime(runtime) {
+  const activeState = runtime.activeThreadId ? runtime.threads[runtime.activeThreadId] : null;
+  const visibleState = activeState || createThreadRuntimeState();
   return {
     activeThreadId: runtime.activeThreadId,
-    loading: runtime.loading,
-    messages: runtime.messages,
-    progress: runtime.progress,
-    thoughts: runtime.thoughts,
-    unread: runtime.unread,
+    loading: visibleState.loading,
+    messages: visibleState.messages,
+    progress: visibleState.progress,
+    threadStates: { ...runtime.threads },
+    thoughts: visibleState.thoughts,
+    unread: Object.values(runtime.threads).some((state) => state.unread),
   };
 }
 
-function patchChatRuntime(runtime, patch) {
-  Object.assign(runtime, patch);
+function notifyChatRuntime(runtime) {
   const snapshot = snapshotChatRuntime(runtime);
   runtime.subscribers.forEach((subscriber) => subscriber(snapshot));
 }
 
+function patchChatRuntime(runtime, patch) {
+  Object.assign(runtime, patch);
+  notifyChatRuntime(runtime);
+}
+
+function getThreadRuntimeState(runtime, threadId) {
+  if (!threadId) return createThreadRuntimeState();
+  if (!runtime.threads[threadId]) {
+    runtime.threads[threadId] = createThreadRuntimeState();
+  }
+  return runtime.threads[threadId];
+}
+
+function patchThreadRuntime(runtime, threadId, patch) {
+  if (!threadId) return;
+  Object.assign(getThreadRuntimeState(runtime, threadId), patch);
+  notifyChatRuntime(runtime);
+}
+
 function resetChatRuntime(runtime) {
+  Object.values(runtime.threads).forEach((state) => state.abortController?.abort());
   patchChatRuntime(runtime, {
     activeThreadId: "",
-    loading: false,
-    messages: defaultMessages,
-    progress: 0,
-    thoughts: [],
-    unread: false,
+    threads: {},
   });
+}
+
+function interruptThreadRuntime(runtime, threadId) {
+  const state = runtime.threads[threadId];
+  if (!state) return null;
+  state.abortController?.abort();
+  state.abortController = null;
+  state.activeStreamToken = null;
+  state.loading = false;
+  state.status = "cancelled";
+  state.requestId += 1;
+  notifyChatRuntime(runtime);
+  return state.jobId || null;
+}
+
+function clampProgress(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(0, Math.min(100, Math.round(number)));
 }
 
 function subscribeChatRuntime(runtime, subscriber) {
@@ -172,12 +227,7 @@ export default function Workbench({ initialView = "assistant" }) {
   const runtimeKey = useMemo(() => getRuntimeKey(auth), [auth.token, auth.user?.id, auth.user?.role, auth.user?.username]);
   const [savedSession, setSavedSession] = useState(null);
   const [restoring, setRestoring] = useState(() => !authRuntime.token);
-  const [silentRestoring, setSilentRestoring] = useState(() => (
-    typeof window !== "undefined"
-      && Boolean(window.localStorage.getItem("tcm_kg_token"))
-      && window.sessionStorage.getItem("tcm_kg_session_confirmed") === "1"
-      && !authRuntime.token
-  ));
+  const [silentRestoring, setSilentRestoring] = useState(false);
   const [activeView, setActiveView] = useState(initialView);
   const [status, setStatus] = useState(() => (authRuntime.token ? "登录成功" : "等待登录"));
   const [messages, setMessages] = useState(runtimeSnapshot.messages);
@@ -186,6 +236,7 @@ export default function Workbench({ initialView = "assistant" }) {
   const [thinkingProgress, setThinkingProgress] = useState(runtimeSnapshot.progress);
   const [chatLoading, setChatLoading] = useState(runtimeSnapshot.loading);
   const [assistantHasUnread, setAssistantHasUnread] = useState(runtimeSnapshot.unread);
+  const [threadStates, setThreadStates] = useState(runtimeSnapshot.threadStates);
   const [threads, setThreads] = useState([]);
   const [activeThreadId, setActiveThreadId] = useState(runtimeSnapshot.activeThreadId);
   const [query, setQuery] = useState("");
@@ -296,14 +347,20 @@ export default function Workbench({ initialView = "assistant" }) {
       setChatLoading(snapshot.loading);
       setAssistantHasUnread(snapshot.unread);
       setActiveThreadId(snapshot.activeThreadId);
+      setThreadStates(snapshot.threadStates);
     });
   }, [runtimeKey]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
     runtime.activeView = activeView;
-    if (activeView === "assistant" && runtime.unread) {
-      patchChatRuntime(runtime, { unread: false });
+    if (activeView === "assistant" && runtime.activeThreadId) {
+      const state = runtime.threads[runtime.activeThreadId];
+      if (state?.unread) {
+        patchThreadRuntime(runtime, runtime.activeThreadId, { unread: false });
+      } else {
+        notifyChatRuntime(runtime);
+      }
     }
   }, [activeView]);
 
@@ -464,15 +521,24 @@ export default function Workbench({ initialView = "assistant" }) {
   }
 
   async function handleSelectThread(threadId) {
-    if (!threadId || chatLoading) return;
+    if (!threadId) return;
+    const runtime = runtimeRef.current;
     setActiveThreadId(threadId);
     setStatus("正在读取历史对话");
+    runtime.activeThreadId = threadId;
+    const existingState = runtime.threads[threadId];
+    if (existingState?.loading || existingState?.loaded) {
+      patchThreadRuntime(runtime, threadId, { unread: false });
+      setStatus(existingState.loading ? "已回到正在生成的对话" : "历史对话已载入");
+      return;
+    }
     try {
       const data = await fetchThreadMessages(auth.token, threadId, 100);
-      patchChatRuntime(runtimeRef.current, {
-        activeThreadId: threadId,
-        messages: data.items?.length ? data.items.map(({ role, content }) => ({ role, content })) : defaultMessages,
+      patchThreadRuntime(runtime, threadId, {
+        loaded: true,
+        messages: data.items?.length ? data.items.map(({ role, content }) => ({ role, content })) : cloneDefaultMessages(),
         progress: 0,
+        status: "idle",
         thoughts: [],
         unread: false,
       });
@@ -492,7 +558,10 @@ export default function Workbench({ initialView = "assistant" }) {
       const thread = data.thread;
       setThreads((items) => [thread, ...items]);
       setActiveThreadId(thread.id);
-      patchChatRuntime(runtimeRef.current, { activeThreadId: thread.id, messages: defaultMessages, progress: 0, thoughts: [], unread: false });
+      const runtime = runtimeRef.current;
+      runtime.activeThreadId = thread.id;
+      runtime.threads[thread.id] = createThreadRuntimeState(cloneDefaultMessages(), true);
+      notifyChatRuntime(runtime);
       setStatus("已创建新对话");
     } catch (error) {
       setStatus("新建对话失败");
@@ -500,8 +569,26 @@ export default function Workbench({ initialView = "assistant" }) {
   }
 
   async function handleClearCurrentThread() {
-    if (chatLoading) return;
-    patchChatRuntime(runtimeRef.current, { messages: defaultMessages, progress: 0, thoughts: [], unread: false });
+    const runtime = runtimeRef.current;
+    const currentState = runtime.threads[activeThreadId];
+    const jobId = currentState?.loading ? interruptThreadRuntime(runtime, activeThreadId) : null;
+    if (jobId) {
+      cancelChatJob(auth.token, jobId).catch(() => {});
+    }
+    if (activeThreadId) {
+      patchThreadRuntime(runtime, activeThreadId, {
+        abortController: null,
+        activeStreamToken: null,
+        jobId: "",
+        loaded: true,
+        loading: false,
+        messages: cloneDefaultMessages(),
+        progress: 0,
+        status: "idle",
+        thoughts: [],
+        unread: false,
+      });
+    }
     if (!activeThreadId) {
       setStatus("当前对话已清空");
       return;
@@ -518,15 +605,23 @@ export default function Workbench({ initialView = "assistant" }) {
   }
 
   async function handleDeleteThread(threadId) {
-    if (!threadId || chatLoading) return;
+    if (!threadId) return;
+    const runtime = runtimeRef.current;
+    const deletingState = runtime.threads[threadId];
+    const jobId = deletingState?.loading ? interruptThreadRuntime(runtime, threadId) : null;
+    if (jobId) {
+      cancelChatJob(auth.token, jobId).catch(() => {});
+    }
     try {
       await deleteChatThread(auth.token, threadId);
       const nextThreads = threads.filter((thread) => thread.id !== threadId);
       setThreads(nextThreads);
+      delete runtime.threads[threadId];
       if (threadId === activeThreadId) {
         setActiveThreadId("");
-        patchChatRuntime(runtimeRef.current, { activeThreadId: "", messages: defaultMessages, progress: 0, thoughts: [], unread: false });
+        runtime.activeThreadId = "";
       }
+      notifyChatRuntime(runtime);
       setStatus("历史对话已删除");
     } catch (error) {
       setStatus("删除历史对话失败");
@@ -534,13 +629,16 @@ export default function Workbench({ initialView = "assistant" }) {
   }
 
   async function ensureThreadForPrompt(text) {
-    if (activeThreadId) return activeThreadId;
+    const runtime = runtimeRef.current;
+    if (runtime.activeThreadId) return runtime.activeThreadId;
     const title = text.slice(0, 28);
     const data = await createChatThread(auth.token, title, graphFocus);
     const thread = data.thread;
     setThreads((items) => [thread, ...items]);
     setActiveThreadId(thread.id);
-    patchChatRuntime(runtimeRef.current, { activeThreadId: thread.id });
+    runtime.activeThreadId = thread.id;
+    runtime.threads[thread.id] = createThreadRuntimeState(cloneDefaultMessages(), true);
+    notifyChatRuntime(runtime);
     return thread.id;
   }
 
@@ -549,62 +647,154 @@ export default function Workbench({ initialView = "assistant" }) {
     const text = prompt.trim();
     const runtime = runtimeRef.current;
     const requestToken = auth.token;
-    if (!text || runtime.loading) return;
+    if (!text) return;
 
     setPrompt("");
-    patchChatRuntime(runtime, {
-      loading: true,
-      messages: [...runtime.messages, { role: "user", content: text }, { role: "assistant", content: "" }],
-      progress: 8,
-      thoughts: [],
-      unread: false,
-    });
-    setStatus("模型正在流式回答");
+    let activeStreamThreadId = "";
 
     try {
       const threadId = await ensureThreadForPrompt(text);
-      patchChatRuntime(runtime, { activeThreadId: threadId });
+      activeStreamThreadId = threadId;
+      const wasThreadRunning = Boolean(runtime.threads[threadId]?.loading);
+      const previousJobId = wasThreadRunning ? interruptThreadRuntime(runtime, threadId) : null;
+      if (previousJobId) {
+        cancelChatJob(auth.token, previousJobId).catch(() => {});
+      }
+
+      const abortController = new AbortController();
+      const streamToken = Symbol("chat-stream");
+      const threadState = getThreadRuntimeState(runtime, threadId);
+      const requestId = threadState.requestId + 1;
+      let streamMessages = [
+        ...(wasThreadRunning ? markInterruptedAssistant(threadState.messages) : threadState.messages),
+        { role: "user", content: text },
+        { role: "assistant", content: "" },
+      ];
+      let streamThoughts = [];
+      let streamProgress = 8;
+      const isCurrentRequest = () => {
+        const state = runtime.threads[threadId];
+        return Boolean(
+          state &&
+          state.requestId === requestId &&
+          state.activeStreamToken === streamToken &&
+          !abortController.signal.aborted
+        );
+      };
+      const streamIsVisible = () => runtime.activeThreadId === threadId;
+
+      patchThreadRuntime(runtime, threadId, {
+        abortController,
+        activeStreamToken: streamToken,
+        jobId: "",
+        loaded: true,
+        loading: true,
+        messages: streamMessages,
+        progress: streamProgress,
+        requestId,
+        status: "running",
+        thoughts: streamThoughts,
+        unread: false,
+      });
+      setStatus("模型正在流式回答");
+
       await postChatStream(
         text,
         auth.token,
         (eventMessage) => {
+          if (!isCurrentRequest()) return;
+          const eventThreadId = eventMessage.thread_id || threadId;
+          if (eventThreadId !== threadId) return;
+          const nextJobId = eventMessage.job_id || runtime.threads[threadId]?.jobId || "";
           if (eventMessage.type === "think") {
-            const nextThoughts = appendThoughtChunk(runtime.thoughts, eventMessage.msg || "");
-            if (nextThoughts !== runtime.thoughts) {
-              patchChatRuntime(runtime, {
-                progress: Math.min(92, runtime.progress + 8),
-                thoughts: nextThoughts,
+            const nextThoughts = appendThoughtChunk(streamThoughts, eventMessage.msg || "");
+            streamProgress = clampProgress(eventMessage.progress, streamProgress);
+            if (nextThoughts !== streamThoughts) {
+              streamThoughts = nextThoughts;
+              patchThreadRuntime(runtime, threadId, {
+                jobId: nextJobId,
+                loading: true,
+                progress: streamProgress,
+                status: "running",
+                thoughts: streamThoughts,
               });
+            } else {
+              patchThreadRuntime(runtime, threadId, { jobId: nextJobId, loading: true, progress: streamProgress, status: "running" });
             }
           }
           if (eventMessage.type === "stream") {
-            patchChatRuntime(runtime, {
-              messages: appendToLastAssistant(runtime.messages, eventMessage.msg || ""),
+            streamProgress = clampProgress(eventMessage.progress, streamProgress);
+            streamMessages = appendToLastAssistant(streamMessages, eventMessage.msg || "");
+            patchThreadRuntime(runtime, threadId, {
+              jobId: nextJobId,
+              loading: true,
+              messages: streamMessages,
+              progress: streamProgress,
+              status: "running",
+              unread: false,
             });
           }
           if (eventMessage.type === "done") {
-            patchChatRuntime(runtime, { progress: 100 });
+            streamProgress = clampProgress(eventMessage.progress, 100);
+            patchThreadRuntime(runtime, threadId, {
+              jobId: nextJobId,
+              loading: false,
+              progress: streamProgress,
+              status: "done",
+              unread: !streamIsVisible() || runtime.activeView !== "assistant",
+            });
           }
         },
-        { threadId },
+        { threadId, signal: abortController.signal, useJobEndpoint: true },
       );
+      if (!isCurrentRequest()) return;
       if (authRuntime.token === requestToken) {
         await refreshUserContext(requestToken);
         setStatus("回答生成完成");
       }
-      if (runtime.activeView !== "assistant") {
-        patchChatRuntime(runtime, { unread: true });
-      }
+      patchThreadRuntime(runtime, threadId, {
+        abortController: null,
+        activeStreamToken: null,
+        loading: false,
+        progress: 100,
+        status: "done",
+        unread: runtime.activeView !== "assistant" || runtime.activeThreadId !== threadId,
+      });
     } catch (error) {
-      patchChatRuntime(runtime, {
-        messages: appendToLastAssistant(runtime.messages, "服务暂时不可用，请稍后再试。"),
-        unread: runtime.activeView !== "assistant",
+      if (error?.name === "AbortError") {
+        return;
+      }
+      const threadId = activeStreamThreadId;
+      const state = threadId ? runtime.threads[threadId] : null;
+      if (!state) return;
+      let errorText = error?.message?.includes("后端问答任务接口不存在")
+        ? "后端仍在运行旧版本，请重启 FastAPI 后端后再试。"
+        : "服务暂时不可用，请稍后再试。";
+      const failedJobId = state.jobId;
+      if (failedJobId) {
+        try {
+          const data = await fetchChatJob(auth.token, failedJobId);
+          if (data?.job?.error) {
+            errorText = `问答任务失败：${data.job.error}`;
+          }
+        } catch (jobError) {
+          // Keep the local connection error when the job status cannot be loaded.
+        }
+      }
+      const streamMessages = appendToLastAssistant(state.messages, errorText);
+      patchThreadRuntime(runtime, threadId, {
+        abortController: null,
+        activeStreamToken: null,
+        loading: false,
+        messages: streamMessages,
+        status: "failed",
+        unread: runtime.activeView !== "assistant" || runtime.activeThreadId !== threadId,
       });
       if (authRuntime.token === requestToken) {
         setStatus("问答连接异常");
       }
     } finally {
-      patchChatRuntime(runtime, { loading: false, progress: runtime.progress ? 100 : 0 });
+      notifyChatRuntime(runtime);
     }
   }
 
@@ -838,6 +1028,7 @@ export default function Workbench({ initialView = "assistant" }) {
             thinkingProgress={thinkingProgress}
             threads={threads}
             activeThreadId={activeThreadId}
+            threadStates={threadStates}
             onSelectThread={handleSelectThread}
             onNewThread={handleNewThread}
             onClearCurrentThread={handleClearCurrentThread}
@@ -919,9 +1110,94 @@ function Topbar({ activeView, status, restoring, graphFocus, graph }) {
 function StatusPill({ icon: Icon, label, tone = "normal" }) { return <span className={"status-pill " + tone}><Icon size={14} />{label}</span>; }
 
 function AssistantPanel(props) {
-  const { messages, prompt, setPrompt, onSubmit, loading, thoughts, thinkingProgress, threads, activeThreadId, onSelectThread, onNewThread, onClearCurrentThread, onDeleteThread } = props;
+  const { messages, prompt, setPrompt, onSubmit, loading, thoughts, thinkingProgress, threads, activeThreadId, threadStates, onSelectThread, onNewThread, onClearCurrentThread, onDeleteThread } = props;
   const activeThread = threads.find((thread) => thread.id === activeThreadId);
-  return <div className="assistant-layout"><section className="history-panel"><div className="panel-heading"><div><p className="eyebrow">{"对话"}</p><h2>{"历史记录"}</h2></div><button className="icon-button" type="button" onClick={onNewThread} title="新建对话"><Plus size={17} /></button></div><div className="thread-list">{threads.map((thread) => <div key={thread.id} className={thread.id === activeThreadId ? "thread-item active" : "thread-item"}><button type="button" className="thread-main" onClick={() => onSelectThread(thread.id)}><strong>{thread.title || "未命名对话"}</strong><span>{thread.message_count} {"条"}</span></button><button className="thread-delete" type="button" onClick={() => onDeleteThread(thread.id)} title="删除对话"><Trash2 size={15} /></button></div>)}{!threads.length && <p className="empty-note">{"暂无历史对话，开始一次方药探索吧。"}</p>}</div></section><section className="chat-surface"><div className="history-strip"><span><History size={14} />{activeThread?.title || "当前对话"}</span><span><Brain size={14} />{loading ? "正在思考" : "就绪"}</span><button type="button" onClick={onClearCurrentThread} disabled={loading}>{"清空当前"}</button></div><div className="message-list">{messages.map((message, index) => <article key={message.role + "-" + index} className={["message", message.role].join(" ")}><span>{message.role === "assistant" ? "问" : "我"}</span><FormattedMessage content={message.content} /></article>)}</div><form className="composer" onSubmit={onSubmit}><input value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="请输入方剂、药材或症状问题" disabled={loading} /><button type="submit" title="发送" disabled={loading}><Send size={18} /></button></form></section><section className="thinking-panel strong"><div className="panel-heading"><div><p className="eyebrow">{"推理"}</p><h2>{"推理轨迹"}</h2></div><span className="progress-number">{thinkingProgress}%</span></div><div className="thinking-bar"><span style={{ width: String(thinkingProgress) + "%" }} /></div><div className="reasoning-steps">{["语义改写", "实体抽取", "图谱证据", "回答生成"].map((step, index) => <div key={step} className={thinkingProgress > index * 24 ? "reasoning-step active" : "reasoning-step"}><span /><div><strong>{step}</strong><small>{thinkingProgress > index * 24 ? "已完成" : "等待中"}</small></div></div>)}</div><div className="thinking-log">{thoughts.map((thought, index) => <p key={thought + "-" + index}>{thought}</p>)}{!thoughts.length && <p>{"等待模型输出推理链路…"}</p>}</div></section></div>;
+  const reasoningSteps = buildReasoningSteps(thoughts, thinkingProgress, loading);
+  return (
+    <div className="assistant-layout">
+      <section className="history-panel">
+        <div className="panel-heading">
+          <div><p className="eyebrow">{"对话"}</p><h2>{"历史记录"}</h2></div>
+          <button className="icon-button" type="button" onClick={onNewThread} title="新建对话"><Plus size={17} /></button>
+        </div>
+        <div className="thread-list">
+          {threads.map((thread) => {
+            const state = threadStates?.[thread.id];
+            const stateLabel = threadStateLabel(state, thread.message_count);
+            return (
+              <div key={thread.id} className={["thread-item", thread.id === activeThreadId ? "active" : "", state?.unread ? "unread" : "", state?.loading ? "running" : "", state?.status === "failed" ? "failed" : ""].filter(Boolean).join(" ")}>
+                <button type="button" className="thread-main" onClick={() => onSelectThread(thread.id)}>
+                  <strong>{thread.title || "未命名对话"}</strong>
+                  <span>{thread.message_count} {"条 · "}{stateLabel}</span>
+                </button>
+                <button className="thread-delete" type="button" onClick={() => onDeleteThread(thread.id)} title="删除对话"><Trash2 size={15} /></button>
+              </div>
+            );
+          })}
+          {!threads.length && <p className="empty-note">{"暂无历史对话，开始一次方药探索吧。"}</p>}
+        </div>
+      </section>
+      <section className="chat-surface">
+        <div className="history-strip">
+          <span><History size={14} />{activeThread?.title || "当前对话"}</span>
+          <span><Brain size={14} />{loading ? "正在思考" : "就绪"}</span>
+          <button type="button" onClick={onClearCurrentThread}>{"清空当前"}</button>
+        </div>
+        <div className="message-list">
+          {messages.map((message, index) => (
+            <article key={message.role + "-" + index} className={["message-row", message.role].join(" ")}>
+              <div className="message-cluster">
+                <span>{message.role === "assistant" ? "问" : "我"}</span>
+                <FormattedMessage content={message.content} />
+              </div>
+            </article>
+          ))}
+        </div>
+        <form className="composer" onSubmit={onSubmit}>
+          <input value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={loading ? "可继续输入新问题，发送后会打断当前思考" : "请输入方剂、药材或症状问题"} />
+          <button type="submit" title={loading ? "打断并发送" : "发送"}><Send size={18} /></button>
+        </form>
+      </section>
+      <section className="thinking-panel strong">
+        <div className="panel-heading">
+          <div><p className="eyebrow">{"推理"}</p><h2>{"推理轨迹"}</h2></div>
+          <span className="progress-number">{thinkingProgress}%</span>
+        </div>
+        <div className="thinking-bar"><span style={{ width: String(thinkingProgress) + "%" }} /></div>
+        <div className="reasoning-steps">
+          {reasoningSteps.map((step) => (
+            <div key={step.label} className={["reasoning-step", step.status].filter(Boolean).join(" ")}>
+              <span />
+              <div><strong>{step.label}</strong><small>{step.text}</small></div>
+            </div>
+          ))}
+        </div>
+        <div className="thinking-log">
+          {thoughts.map((thought, index) => <p key={thought + "-" + index}>{thought}</p>)}
+          {!thoughts.length && <p>{"等待模型输出推理链路…"}</p>}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function buildReasoningSteps(thoughts, progress, loading) {
+  const log = thoughts.join("\n");
+  const done = progress >= 100 && !loading;
+  const stages = [
+    { label: "语义改写", start: ["开始生成语义转写"], complete: ["完成生成语义转写"] },
+    { label: "实体抽取", start: ["开始从用户输入中抽取中医实体"], complete: ["完成从用户输入中抽取中医实体"] },
+    { label: "图谱证据", start: ["开始匹配知识图谱中的实体", "开始生成Cypher查询语句"], complete: ["完成执行Cypher查询语句"] },
+    { label: "回答生成", start: ["开始生成基于知识图谱的回答", "开始生成直接回答"], complete: ["完成生成基于知识图谱的回答", "完成生成直接回答"] },
+  ];
+  return stages.map((stage, index) => {
+    const isComplete = done || stage.complete.some((item) => log.includes(item));
+    const isActive = !isComplete && stage.start.some((item) => log.includes(item));
+    if (isComplete) return { label: stage.label, status: "complete", text: "已完成" };
+    if (isActive) return { label: stage.label, status: "active", text: "进行中" };
+    if (index === 0 && loading) return { label: stage.label, status: "active", text: "进行中" };
+    return { label: stage.label, status: "", text: "等待中" };
+  });
 }
 
 function SearchPanel(props) {
@@ -1265,6 +1541,8 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const landingRef = useRef(null);
+  const loginRef = useRef(null);
+  const [focusedField, setFocusedField] = useState("");
   const isAdmin = loginKind === "admin";
 
   useEffect(() => {
@@ -1305,6 +1583,23 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
     element.style.setProperty("--my", "0");
   }
 
+  function handleLoginPointerMove(event) {
+    const element = loginRef.current;
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
+    const y = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
+    element.style.setProperty("--mx", x.toFixed(3));
+    element.style.setProperty("--my", y.toFixed(3));
+  }
+
+  function resetLoginPointer() {
+    const element = loginRef.current;
+    if (!element) return;
+    element.style.setProperty("--mx", "0");
+    element.style.setProperty("--my", "0");
+  }
+
   if (!showLogin) {
     return (
       <main className="landing-shell" ref={landingRef} onPointerMove={handleLandingPointerMove} onPointerLeave={resetLandingPointer}>
@@ -1338,19 +1633,36 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
   }
 
   return (
-    <main className="login-shell login-shell-v2">
+    <main className={["login-shell", "login-shell-v2", focusedField ? "is-typing" : "", password ? "has-password" : ""].filter(Boolean).join(" ")} ref={loginRef} onPointerMove={handleLoginPointerMove} onPointerLeave={resetLoginPointer}>
       <div className="login-image-bg" />
       <div className="paper-wash" />
+      <section className="login-creature-stage" aria-hidden="true">
+        <div className="stage-brand"><span>{"药图"}</span><strong>{"中医知识图谱"}</strong></div>
+        <div className="herb-creatures">
+          <div className="creature creature-bottle">
+            <i className="eye left" /><i className="eye right" /><span className="herb-stem" />
+          </div>
+          <div className="creature creature-cabinet">
+            <i className="eye left" /><i className="eye right" /><span className="drawer one" /><span className="drawer two" />
+          </div>
+          <div className="creature creature-bowl">
+            <i className="pupil left" /><i className="pupil right" />
+          </div>
+          <div className="creature creature-tea">
+            <i className="pupil left" /><i className="pupil right" /><span className="mouth" />
+          </div>
+        </div>
+      </section>
       <section className="login-panel login-panel-v2">
-        <h1>{isAdmin ? "登录管理员" : "登录用户"}</h1>
+        <h1>{isAdmin ? "登录管理员" : mode === "register" ? "注册用户" : "登录用户"}</h1>
         <div className="login-kind-switch" role="tablist" aria-label="登录类型">
           <button type="button" className={loginKind === "user" ? "active" : ""} onClick={() => setLoginKind("user")}>{"用户登录"}</button>
           <button type="button" className={loginKind === "admin" ? "active" : ""} onClick={() => setLoginKind("admin")}>{"管理员登录"}</button>
         </div>
         {savedSession && <div className="session-card"><span>{"已检测到上次会话："}{savedSession.user?.username}</span><button type="button" onClick={() => onContinue(savedSession)}>{"继续进入"}</button></div>}
         <form onSubmit={submit} className="login-form">
-          <label><span>{isAdmin ? "管理员账号" : "用户名"}</span><input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" /></label>
-          <label><span>{"密码"}</span><input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>
+          <label><span>{isAdmin ? "管理员账号" : "用户名"}</span><input value={username} onFocus={() => setFocusedField("username")} onBlur={() => setFocusedField("")} onChange={(event) => setUsername(event.target.value)} autoComplete="username" /></label>
+          <label><span>{"密码"}</span><input value={password} onFocus={() => setFocusedField("password")} onBlur={() => setFocusedField("")} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>
           {error && <div className="auth-error">{error}</div>}
           <button type="submit" disabled={loading}>{loading ? "处理中" : isAdmin ? "进入管理后台" : mode === "login" ? "登录" : "创建账号"}</button>
         </form>
@@ -1393,7 +1705,25 @@ function FormattedMessage({ content }) {
 }
 
 function activeTitle(view) { return { assistant: "智能问答", search: "方药知识搜索", graph: "知识图谱关联", admin: "管理员后台" }[view] || "中医知识图谱"; }
+function threadStateLabel(state, messageCount = 0) {
+  if (state?.loading) return "思考中";
+  if (state?.status === "failed") return "失败";
+  if (state?.unread) return "已完成未读";
+  if (state?.status === "done") return "已完成";
+  return messageCount ? "已保存" : "空对话";
+}
 function appendToLastAssistant(messages, chunk) { const next = [...messages]; const lastIndex = next.length - 1; if (lastIndex >= 0 && next[lastIndex].role === "assistant") { next[lastIndex] = { ...next[lastIndex], content: next[lastIndex].content + chunk }; return next; } return [...next, { role: "assistant", content: chunk }]; }
+function markInterruptedAssistant(messages) {
+  const next = [...messages];
+  const lastIndex = next.length - 1;
+  if (lastIndex < 0 || next[lastIndex].role !== "assistant") return next;
+  const content = String(next[lastIndex].content || "").trim();
+  next[lastIndex] = {
+    ...next[lastIndex],
+    content: content ? `${next[lastIndex].content}\n\n（已中断，转为处理新的问题。）` : "已中断，转为处理新的问题。",
+  };
+  return next;
+}
 function cleanMarkdown(text) { return text.replace(/\*\*/g, "").trim(); }
 function countRelated(item) { const related = item.properties?.related; if (!related) return 0; return String(related).split(/[;；]/).filter(Boolean).length; }
 function propertyLabel(key) { return { source: "出处", ingredients: "组成", effect: "功效", usage: "用法", taboo: "禁忌", indication: "主治", category: "分类", nature: "药性", flavor: "药味", meridian: "归经", dosage: "剂量", preparation: "炮制", alias: "别名", description: "说明", related: "关联知识", label: "类型" }[key] || key; }

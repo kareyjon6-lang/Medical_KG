@@ -5,6 +5,8 @@ python-dotenv
 langchain-core
 langchain-openai
 langgraph
+torch
+transformers>=4.37.0
 sentence-transformers
 faiss-cpu
 numpy

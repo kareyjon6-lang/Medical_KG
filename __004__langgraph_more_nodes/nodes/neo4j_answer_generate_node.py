@@ -5,13 +5,14 @@ from __004__langgraph_more_nodes.agent_state import AgentState
 from langchain_core.messages import HumanMessage
 
 from __005__fastapi.__003__msg_queue import put_stream_text_to_msg, put_think_text_to_msg
+from __004__langgraph_more_nodes.nodes.runtime_config import get_thread_id
 from common.llm import my_llm
 import json
 
 
-async def neo4j_answer_generate_node(state: AgentState, config: RunnableConfig) -> AgentState:
+async def neo4j_answer_generate_node(state: AgentState, config: RunnableConfig | None = None) -> AgentState:
     # 获取用户ID
-    user_id = config.get("configurable", {}).get("thread_id", "")
+    user_id = get_thread_id(config, state)
     print("开始进行neo4j输入大模型的回答")
     await put_think_text_to_msg(user_id, "开始生成基于知识图谱的回答")
     user_input = state["input_semantic_trans"]
@@ -48,3 +49,5 @@ async def neo4j_answer_generate_node(state: AgentState, config: RunnableConfig) 
     await put_think_text_to_msg(user_id, "完成生成基于知识图谱的回答")
 
     return state
+
+

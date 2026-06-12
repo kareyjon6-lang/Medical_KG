@@ -3,13 +3,14 @@ from langchain_core.runnables import RunnableConfig
 
 from __004__langgraph_more_nodes.agent_state import AgentState
 from __005__fastapi.__003__msg_queue import put_think_text_to_msg
+from __004__langgraph_more_nodes.nodes.runtime_config import get_thread_id
 from common.llm import my_llm
 from common.config import Config
 
 conf = Config()
 
 
-async def semantic_transcription_node(state: AgentState, config: RunnableConfig) -> AgentState:
+async def semantic_transcription_node(state: AgentState, config: RunnableConfig | None = None) -> AgentState:
     """
     语义转写节点：
     根据历史对话内容（history_messages）和当前用户输入（input），
@@ -18,7 +19,7 @@ async def semantic_transcription_node(state: AgentState, config: RunnableConfig)
     # 次数置为0
     # 为什么这里要置为0？因为现在初始节点是semantic_transcription_node节点，当你经过这个节点说明是重新问了一个问题，那么你里面尝试生成cypher语句次数也要置为0，
     # 不然的话问第4个问题（最多第4个，不排除一个问题不能一次成功生成）的时候会直接报“已达到最大尝试次数({attempts}次)，不再重新生成Cypher语句，直接使用大模型生成回答”，
-    user_id = config.get("configurable", {}).get("thread_id", "")
+    user_id = get_thread_id(config, state)
     state["cypher_generation_attempts"] = 0
     # 获取用户输入和历史上下文
     print("开始生成语义转写...")
@@ -63,3 +64,6 @@ async def semantic_transcription_node(state: AgentState, config: RunnableConfig)
     print(f"完成生成语义转写：{result}")
     await put_think_text_to_msg(user_id, f"完成生成语义转写：{result}")
     return state
+
+
+

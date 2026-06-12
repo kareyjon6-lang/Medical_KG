@@ -3,10 +3,12 @@ import { test } from "node:test";
 
 import {
   buildApiUrl,
+  chatJobsUrl,
   chatThreadMessagesUrl,
   chatThreadsUrl,
   graphUrl,
   parseQueuedMessages,
+  postChatStream,
   processUrl,
   searchUrl,
 } from "../lib/api.js";
@@ -44,6 +46,8 @@ test("memory endpoints use stable backend paths", () => {
 
 test("chat thread endpoints expose stable backend paths", () => {
   assert.equal(chatThreadsUrl(), "http://localhost:8000/api/chat/threads");
+  assert.equal(chatJobsUrl(), "http://localhost:8000/api/chat/jobs");
+  assert.equal(chatJobsUrl("job-1"), "http://localhost:8000/api/chat/jobs/job-1");
   assert.equal(
     chatThreadMessagesUrl("thread-1"),
     "http://localhost:8000/api/chat/threads/thread-1/messages"
@@ -77,6 +81,63 @@ test("streaming chat helpers target process endpoint and parse queued messages",
       rest: '{"type":"do',
     }
   );
+});
+
+test("postChatStream forwards abort signal to the streaming request", async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  const messages = [];
+  let requestOptions;
+  globalThis.fetch = async (_url, options) => {
+    requestOptions = options;
+    return new Response(new ReadableStream({
+      start(streamController) {
+        streamController.enqueue(new TextEncoder().encode('{"type":"done"}\n'));
+        streamController.close();
+      },
+    }), { status: 200 });
+  };
+
+  try {
+    await postChatStream("你好", "token", (message) => messages.push(message), {
+      signal: controller.signal,
+      threadId: "thread-1",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(requestOptions.signal, controller.signal);
+  assert.equal(JSON.parse(requestOptions.body).thread_id, "thread-1");
+  assert.deepEqual(messages, [{ type: "done" }]);
+});
+
+test("postChatStream can target chat jobs endpoint", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestUrl = "";
+  let requestBody = "";
+  globalThis.fetch = async (url, options) => {
+    requestUrl = url;
+    requestBody = options.body;
+    return new Response(new ReadableStream({
+      start(streamController) {
+        streamController.enqueue(new TextEncoder().encode('{"type":"done","job_id":"job-1","thread_id":"thread-1"}\n'));
+        streamController.close();
+      },
+    }), { status: 200 });
+  };
+
+  try {
+    await postChatStream("麻黄汤是什么？", "token", () => {}, {
+      threadId: "thread-1",
+      useJobEndpoint: true,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(requestUrl, "http://localhost:8000/api/chat/jobs");
+  assert.deepEqual(JSON.parse(requestBody), { input: "麻黄汤是什么？", thread_id: "thread-1" });
 });
 
 test("website exposes stable page routes", () => {

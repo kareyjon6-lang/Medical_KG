@@ -3,11 +3,12 @@ from __004__langgraph_more_nodes.agent_state import AgentState
 from langchain_core.messages import HumanMessage
 from common.llm import my_llm
 from __005__fastapi.__003__msg_queue import put_think_text_to_msg
+from __004__langgraph_more_nodes.nodes.runtime_config import get_thread_id
 
 
-async def zhongyi_intent_node(state: AgentState, config: RunnableConfig):
+async def zhongyi_intent_node(state: AgentState, config: RunnableConfig | None = None):
     # 获取用户ID
-    user_id = config.get("configurable", {}).get("thread_id", "")
+    user_id = get_thread_id(config, state)
     print("开始识别是否是中医的意图识别")
     await put_think_text_to_msg(user_id, "开始识别中医意图")
     # 获取用户输入
@@ -72,3 +73,6 @@ if __name__ == "__main__":
 
 
     asyncio.run(main())
+
+
+

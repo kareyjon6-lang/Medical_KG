@@ -64,6 +64,26 @@ class PgMemoryStore:
             )
             """,
             """
+            CREATE TABLE IF NOT EXISTS chat_jobs (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                session_id TEXT,
+                thread_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                question TEXT NOT NULL,
+                progress INTEGER NOT NULL DEFAULT 0,
+                thoughts TEXT NOT NULL DEFAULT '',
+                answer TEXT NOT NULL DEFAULT '',
+                error TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                finished_at TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES users(id),
+                FOREIGN KEY(session_id) REFERENCES user_sessions(id),
+                FOREIGN KEY(thread_id) REFERENCES chat_threads(id)
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS user_memories (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,
@@ -81,6 +101,7 @@ class PgMemoryStore:
                 self._execute(conn, statement)
             self._ensure_user_role(conn)
             self._ensure_chat_message_thread_id(conn)
+            self._ensure_chat_jobs(conn)
             self._commit(conn)
         self.ensure_default_admin()
 
@@ -229,6 +250,7 @@ class PgMemoryStore:
             return False
         with self._connect() as conn:
             self._execute(conn, "DELETE FROM user_memories WHERE user_id = {0}", [user_id])
+            self._execute(conn, "DELETE FROM chat_jobs WHERE user_id = {0}", [user_id])
             self._execute(conn, "DELETE FROM chat_messages WHERE user_id = {0}", [user_id])
             self._execute(conn, "DELETE FROM chat_threads WHERE user_id = {0}", [user_id])
             self._execute(conn, "DELETE FROM user_sessions WHERE user_id = {0}", [user_id])
@@ -375,6 +397,14 @@ class PgMemoryStore:
             self._execute(
                 conn,
                 """
+                DELETE FROM chat_jobs
+                WHERE user_id = {0} AND thread_id = {0}
+                """,
+                [user_id, thread_id],
+            )
+            self._execute(
+                conn,
+                """
                 DELETE FROM chat_messages
                 WHERE user_id = {0} AND thread_id = {0}
                 """,
@@ -425,6 +455,126 @@ class PgMemoryStore:
                 )
             self._commit(conn)
         return message
+
+    def create_chat_job(self, user_id: str, session_id: Optional[str], thread_id: str, question: str) -> Dict[str, Any]:
+        job = {
+            "id": secrets.token_hex(16),
+            "user_id": user_id,
+            "session_id": session_id,
+            "thread_id": thread_id,
+            "status": "queued",
+            "question": question,
+            "progress": 0,
+            "thoughts": "",
+            "answer": "",
+            "error": "",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "finished_at": None,
+        }
+        with self._connect() as conn:
+            self._execute(
+                conn,
+                """
+                INSERT INTO chat_jobs (
+                    id, user_id, session_id, thread_id, status, question, progress,
+                    thoughts, answer, error, created_at, updated_at, finished_at
+                )
+                VALUES ({0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0})
+                """,
+                [
+                    job["id"],
+                    user_id,
+                    session_id,
+                    thread_id,
+                    job["status"],
+                    question,
+                    job["progress"],
+                    job["thoughts"],
+                    job["answer"],
+                    job["error"],
+                    job["created_at"],
+                    job["updated_at"],
+                    job["finished_at"],
+                ],
+            )
+            self._commit(conn)
+        return job
+
+    def update_chat_job(self, user_id: str, job_id: str, **fields) -> Optional[Dict[str, Any]]:
+        allowed = {"status", "progress", "thoughts", "answer", "error", "finished_at"}
+        updates = {key: value for key, value in fields.items() if key in allowed}
+        if not updates:
+            return self.get_chat_job(user_id, job_id)
+        updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+        assignments = ", ".join(f"{key} = {{0}}" for key in updates)
+        values = list(updates.values()) + [user_id, job_id]
+        with self._connect() as conn:
+            self._execute(
+                conn,
+                f"UPDATE chat_jobs SET {assignments} WHERE user_id = {{0}} AND id = {{0}}",
+                values,
+            )
+            self._commit(conn)
+        return self.get_chat_job(user_id, job_id)
+
+    def get_chat_job(self, user_id: str, job_id: str) -> Optional[Dict[str, Any]]:
+        if not job_id:
+            return None
+        with self._connect() as conn:
+            rows = self._query(
+                conn,
+                """
+                SELECT id, user_id, session_id, thread_id, status, question, progress,
+                       thoughts, answer, error, created_at, updated_at, finished_at
+                FROM chat_jobs
+                WHERE user_id = {0} AND id = {0}
+                """,
+                [user_id, job_id],
+            )
+        return self._public_job(rows[0]) if rows else None
+
+    def get_active_chat_job(self, user_id: str, thread_id: str) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            rows = self._query(
+                conn,
+                """
+                SELECT id, user_id, session_id, thread_id, status, question, progress,
+                       thoughts, answer, error, created_at, updated_at, finished_at
+                FROM chat_jobs
+                WHERE user_id = {0} AND thread_id = {0} AND status IN ({0}, {0})
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                [user_id, thread_id, "queued", "running"],
+            )
+        return self._public_job(rows[0]) if rows else None
+
+    def cancel_active_chat_jobs(self, user_id: str, thread_id: str, exclude_job_id: Optional[str] = None) -> int:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            if exclude_job_id:
+                cursor = self._execute(
+                    conn,
+                    """
+                    UPDATE chat_jobs
+                    SET status = {0}, updated_at = {0}, finished_at = {0}
+                    WHERE user_id = {0} AND thread_id = {0} AND id <> {0} AND status IN ({0}, {0})
+                    """,
+                    ["cancelled", now, now, user_id, thread_id, exclude_job_id, "queued", "running"],
+                )
+            else:
+                cursor = self._execute(
+                    conn,
+                    """
+                    UPDATE chat_jobs
+                    SET status = {0}, updated_at = {0}, finished_at = {0}
+                    WHERE user_id = {0} AND thread_id = {0} AND status IN ({0}, {0})
+                    """,
+                    ["cancelled", now, now, user_id, thread_id, "queued", "running"],
+                )
+            self._commit(conn)
+        return int(cursor.rowcount or 0)
 
     def get_recent_messages(self, user_id: str, limit: int = 10) -> List[Dict[str, str]]:
         with self._connect() as conn:
@@ -539,6 +689,16 @@ class PgMemoryStore:
             return
         self._execute_raw(conn, "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS thread_id TEXT")
 
+    def _ensure_chat_jobs(self, conn) -> None:
+        if self.is_sqlite:
+            return
+        self._execute_raw(conn, "ALTER TABLE chat_jobs ADD COLUMN IF NOT EXISTS session_id TEXT")
+        self._execute_raw(conn, "ALTER TABLE chat_jobs ADD COLUMN IF NOT EXISTS progress INTEGER NOT NULL DEFAULT 0")
+        self._execute_raw(conn, "ALTER TABLE chat_jobs ADD COLUMN IF NOT EXISTS thoughts TEXT NOT NULL DEFAULT ''")
+        self._execute_raw(conn, "ALTER TABLE chat_jobs ADD COLUMN IF NOT EXISTS answer TEXT NOT NULL DEFAULT ''")
+        self._execute_raw(conn, "ALTER TABLE chat_jobs ADD COLUMN IF NOT EXISTS error TEXT NOT NULL DEFAULT ''")
+        self._execute_raw(conn, "ALTER TABLE chat_jobs ADD COLUMN IF NOT EXISTS finished_at TIMESTAMP")
+
     def _ensure_user_role(self, conn) -> None:
         if self.is_sqlite:
             columns = self._query_raw(conn, "PRAGMA table_info(users)")
@@ -558,6 +718,23 @@ class PgMemoryStore:
 
     def _commit(self, conn) -> None:
         conn.commit()
+
+    def _public_job(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "id": row["id"],
+            "user_id": row["user_id"],
+            "session_id": row.get("session_id"),
+            "thread_id": row["thread_id"],
+            "status": row["status"],
+            "question": row["question"],
+            "progress": int(row.get("progress") or 0),
+            "thoughts": row.get("thoughts") or "",
+            "answer": row.get("answer") or "",
+            "error": row.get("error") or "",
+            "created_at": str(row.get("created_at") or ""),
+            "updated_at": str(row.get("updated_at") or ""),
+            "finished_at": str(row.get("finished_at") or ""),
+        }
 
 
 def hash_password(password: str) -> str:

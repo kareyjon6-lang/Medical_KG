@@ -94,6 +94,36 @@ def test_chat_threads_group_messages_and_update_focus(tmp_path):
     assert messages[0]["thread_id"] == thread["id"]
 
 
+def test_chat_jobs_track_status_and_cancel_active_jobs_by_thread(tmp_path):
+    store = PgMemoryStore(f"sqlite:///{tmp_path / 'test.db'}")
+    store.init_schema()
+    user = store.create_user("job_owner", "secret123")
+    session = store.create_session(user["id"])
+    first_thread = store.create_chat_thread(user["id"], "一号")
+    second_thread = store.create_chat_thread(user["id"], "二号")
+
+    first_job = store.create_chat_job(user["id"], session["id"], first_thread["id"], "第一个问题")
+    second_job = store.create_chat_job(user["id"], session["id"], second_thread["id"], "第二个问题")
+    store.update_chat_job(user["id"], first_job["id"], status="running", progress=34, thoughts="实体抽取完成")
+    store.update_chat_job(user["id"], second_job["id"], status="running")
+
+    assert store.get_active_chat_job(user["id"], first_thread["id"])["id"] == first_job["id"]
+    assert store.cancel_active_chat_jobs(user["id"], first_thread["id"]) == 1
+    assert store.get_chat_job(user["id"], first_job["id"])["status"] == "cancelled"
+    assert store.get_chat_job(user["id"], second_job["id"])["status"] == "running"
+
+    done = store.update_chat_job(
+        user["id"],
+        second_job["id"],
+        status="done",
+        progress=100,
+        answer="第二个回答",
+    )
+    assert done["status"] == "done"
+    assert done["answer"] == "第二个回答"
+    assert done["progress"] == 100
+
+
 def test_user_roles_listing_and_delete_cascade(tmp_path):
     store = PgMemoryStore(f"sqlite:///{tmp_path / 'test.db'}")
     store.init_schema()
@@ -103,6 +133,7 @@ def test_user_roles_listing_and_delete_cascade(tmp_path):
     session = store.create_session(user["id"])
     thread = store.create_chat_thread(user["id"], "测试对话", focus_entity="麻黄汤")
     store.append_chat_message(user["id"], session["id"], "user", "麻黄汤是什么？", thread_id=thread["id"])
+    job = store.create_chat_job(user["id"], session["id"], thread["id"], "麻黄汤是什么？")
     store.upsert_memory(user["id"], "preference", "关注禁忌")
 
     users = store.list_users()
@@ -114,3 +145,4 @@ def test_user_roles_listing_and_delete_cascade(tmp_path):
     assert store.get_user_by_username("managed_user") is None
     assert store.get_thread_messages(user["id"], thread["id"]) == []
     assert store.get_memories(user["id"]) == []
+    assert store.get_chat_job(user["id"], job["id"]) is None

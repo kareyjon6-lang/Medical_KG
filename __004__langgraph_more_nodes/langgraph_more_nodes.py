@@ -16,10 +16,6 @@ from __004__langgraph_more_nodes.nodes.run_cypher_node import run_cypher_node
 from __004__langgraph_more_nodes.nodes.neo4j_answer_generate_node import neo4j_answer_generate_node
 from __004__langgraph_more_nodes.nodes.semantic_transcription_node import semantic_transcription_node
 
-from common.ouput_graph_utils import output_pic_graph
-from common.path_utils import get_file_path
-
-
 def build_graph():
     graph_builder = StateGraph(AgentState)
 
@@ -92,14 +88,11 @@ def build_graph():
 
 graph = build_graph()
 
-output_pic_graph(graph, get_file_path("__004__langgraph_more_nodes/graph.jpg"))
-
-
 async def zhongyi_response(input: str, user_id: str):
     config = RunnableConfig(configurable={
         "thread_id": user_id
     })
-    result = await graph.ainvoke({"input": input}, config=config)
+    result = await graph.ainvoke({"input": input, "runtime_thread_id": user_id}, config=config)
     return result["output"]
 
 

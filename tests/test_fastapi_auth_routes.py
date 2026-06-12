@@ -32,7 +32,6 @@ def test_process_stream_stores_chat_history(monkeypatch, tmp_path):
         await put_done_to_msg(user_id)
 
     monkeypatch.setattr(main, "_legacy_zhongyi_task", fake_legacy_task)
-    monkeypatch.setattr(main, "graph_direct_answer", lambda input_text: None)
     auth = client.post("/api/auth/register", json={"username": "stream_user", "password": "secret123"}).json()
 
     response = client.post(
@@ -83,33 +82,17 @@ def test_process_uses_fast_greeting_path_without_graph(monkeypatch, tmp_path):
     assert history[1]["content"] == "您好，请问您有什么中医相关的问题需要咨询？"
 
 
-def test_process_uses_graph_direct_answer_for_formula_fields(monkeypatch, tmp_path):
+def test_process_uses_default_langgraph_for_formula_fields(monkeypatch, tmp_path):
     main = load_main_with_sqlite(monkeypatch, tmp_path)
     client = TestClient(main.app)
+    seen_graph_thread_ids = []
 
-    class FakeNeo4j:
-        def run_cypher(self, query, parameters=None):
-            assert parameters["query"] == "麻黄汤"
-            return [
-                {
-                    "properties": {
-                        "name": "麻黄汤",
-                        "ingredients": "麻黄、桂枝、杏仁、甘草",
-                        "source": "伤寒论",
-                    },
-                    "label": "Formula",
-                    "related_items": [
-                        {"type": "HAS_INGREDIENT", "label": "Herb", "properties": {"name": "麻黄"}},
-                        {"type": "HAS_INGREDIENT", "label": "Herb", "properties": {"name": "桂枝"}},
-                    ],
-                }
-            ]
+    async def fake_legacy_task(input_text, user_id):
+        seen_graph_thread_ids.append(user_id)
+        await put_stream_text_to_msg(user_id, "默认图谱推理回答。")
+        await put_done_to_msg(user_id)
 
-    async def should_not_run(input_text, user_id):
-        raise AssertionError("formula field questions should use graph direct answer")
-
-    monkeypatch.setattr(main, "neo4j_client", FakeNeo4j())
-    monkeypatch.setattr(main, "_legacy_zhongyi_task", should_not_run)
+    monkeypatch.setattr(main, "_legacy_zhongyi_task", fake_legacy_task)
     auth = client.post("/api/auth/register", json={"username": "formula_user", "password": "secret123"}).json()
 
     response = client.post(
@@ -119,9 +102,40 @@ def test_process_uses_graph_direct_answer_for_formula_fields(monkeypatch, tmp_pa
     )
 
     assert response.status_code == 200
-    assert "麻黄汤的组成如下" in response.text
-    assert "麻黄、桂枝、杏仁、甘草" in response.text
-    assert "Cypher查询" in response.text
+    assert seen_graph_thread_ids == [auth["user"]["id"]]
+    assert "默认图谱推理回答" in response.text
+
+
+def test_process_has_no_fast_graph_shortcut_for_symptom_questions(monkeypatch, tmp_path):
+    main = load_main_with_sqlite(monkeypatch, tmp_path)
+    client = TestClient(main.app)
+    seen_inputs = []
+
+    async def fake_legacy_task(input_text, user_id):
+        seen_inputs.append(input_text)
+        await put_stream_text_to_msg(user_id, "已进入默认图谱链路。")
+        await put_done_to_msg(user_id)
+
+    monkeypatch.setattr(main, "_legacy_zhongyi_task", fake_legacy_task)
+    auth = client.post("/api/auth/register", json={"username": "fast_user", "password": "secret123"}).json()
+
+    response = client.post(
+        "/process",
+        json={"input": "肚子疼应该吃什么药？"},
+        headers={"Authorization": f"Bearer {auth['token']}"},
+    )
+
+    assert response.status_code == 200
+    assert seen_inputs == ["肚子疼应该吃什么药？"]
+    assert "已进入默认图谱链路" in response.text
+
+    history = client.get(
+        "/api/chat/history",
+        headers={"Authorization": f"Bearer {auth['token']}"},
+    ).json()["items"]
+
+    assert [item["role"] for item in history] == ["user", "assistant"]
+    assert history[1]["content"] == "已进入默认图谱链路。"
 
 
 def test_chat_thread_routes_and_process_thread_storage(monkeypatch, tmp_path):
@@ -135,7 +149,6 @@ def test_chat_thread_routes_and_process_thread_storage(monkeypatch, tmp_path):
         await put_done_to_msg(user_id)
 
     monkeypatch.setattr(main, "_legacy_zhongyi_task", fake_legacy_task)
-    monkeypatch.setattr(main, "graph_direct_answer", lambda input_text: None)
     auth = client.post("/api/auth/register", json={"username": "thread_user", "password": "secret123"}).json()
     headers = {"Authorization": f"Bearer {auth['token']}"}
 
@@ -164,6 +177,66 @@ def test_chat_thread_routes_and_process_thread_storage(monkeypatch, tmp_path):
     assert [item["role"] for item in messages] == ["user", "assistant"]
     assert messages[0]["content"] == "麻黄汤有什么禁忌？"
     assert messages[1]["content"] == "麻黄汤禁忌包括表虚自汗。"
+
+
+def test_chat_job_endpoint_uses_job_id_as_graph_queue_key(monkeypatch, tmp_path):
+    main = load_main_with_sqlite(monkeypatch, tmp_path)
+    client = TestClient(main.app)
+    seen_graph_thread_ids = []
+
+    async def fake_legacy_task(input_text, user_id):
+        seen_graph_thread_ids.append(user_id)
+        await put_stream_text_to_msg(user_id, "job 隔离回答。")
+        await put_done_to_msg(user_id)
+
+    monkeypatch.setattr(main, "_legacy_zhongyi_task", fake_legacy_task)
+    auth = client.post("/api/auth/register", json={"username": "job_user", "password": "secret123"}).json()
+    headers = {"Authorization": f"Bearer {auth['token']}"}
+    thread = client.post("/api/chat/threads", json={"title": "job 测试"}, headers=headers).json()["thread"]
+
+    response = client.post(
+        "/api/chat/jobs",
+        json={"input": "麻黄汤是什么？", "thread_id": thread["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert "job 隔离回答" in response.text
+    job_id = response.text.split('"job_id": "')[1].split('"', 1)[0]
+    assert seen_graph_thread_ids == [job_id]
+    assert job_id != thread["id"]
+    job = client.get(f"/api/chat/jobs/{job_id}", headers=headers).json()["job"]
+    assert job["thread_id"] == thread["id"]
+    assert job["status"] == "done"
+
+
+def test_same_thread_new_job_cancels_previous_active_job_but_other_threads_keep_running(monkeypatch, tmp_path):
+    main = load_main_with_sqlite(monkeypatch, tmp_path)
+    client = TestClient(main.app)
+    auth = client.post("/api/auth/register", json={"username": "parallel_user", "password": "secret123"}).json()
+    headers = {"Authorization": f"Bearer {auth['token']}"}
+    first_thread = client.post("/api/chat/threads", json={"title": "一号"}, headers=headers).json()["thread"]
+    second_thread = client.post("/api/chat/threads", json={"title": "二号"}, headers=headers).json()["thread"]
+
+    first_job = main.memory_store.create_chat_job(auth["user"]["id"], auth["session_id"], first_thread["id"], "第一个问题")
+    main.memory_store.update_chat_job(auth["user"]["id"], first_job["id"], status="running")
+    second_job = main.memory_store.create_chat_job(auth["user"]["id"], auth["session_id"], second_thread["id"], "第二个问题")
+    main.memory_store.update_chat_job(auth["user"]["id"], second_job["id"], status="running")
+
+    async def fake_legacy_task(input_text, user_id):
+        await put_stream_text_to_msg(user_id, "新问题回答。")
+        await put_done_to_msg(user_id)
+
+    monkeypatch.setattr(main, "_legacy_zhongyi_task", fake_legacy_task)
+    response = client.post(
+        "/api/chat/jobs",
+        json={"input": "同一历史对话的新问题", "thread_id": first_thread["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert main.memory_store.get_chat_job(auth["user"]["id"], first_job["id"])["status"] == "cancelled"
+    assert main.memory_store.get_chat_job(auth["user"]["id"], second_job["id"])["status"] == "running"
 
 
 def test_cors_origins_include_deployed_frontend_env(monkeypatch, tmp_path):

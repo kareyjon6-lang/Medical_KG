@@ -15,6 +15,7 @@ from common.config import Config
 from common.embedding_model import embedding_model
 from common.path_utils import get_file_path
 from __005__fastapi.__003__msg_queue import put_think_text_to_msg
+from __004__langgraph_more_nodes.nodes.runtime_config import get_thread_id
 
 conf = Config()
 # 索引文件路径
@@ -191,9 +192,9 @@ def match_entity_neo4j(state: AgentState, user_input_key, matched_key):
     state[matched_key] = matched_entitys
 
 
-async def match_entity_from_neo4j_node(state: AgentState, config: RunnableConfig):
+async def match_entity_from_neo4j_node(state: AgentState, config: RunnableConfig | None = None):
     # 获取用户ID
-    user_id = config.get("configurable", {}).get("thread_id", "")
+    user_id = get_thread_id(config, state)
     print("开始匹配实体")
     await put_think_text_to_msg(user_id, "开始匹配知识图谱中的实体")
     match_entity_neo4j(state, "user_input_effects", "matched_effects")
@@ -221,3 +222,5 @@ if __name__ == '__main__':
 
 
     asyncio.run(main())
+
+

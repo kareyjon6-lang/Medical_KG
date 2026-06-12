@@ -14,7 +14,9 @@ node_modules/
 dist/
 build/
 models/
+bert-base-chinese/
 *.log
+*.pid
 figma-*.png
 
 # Local databases and runtime state

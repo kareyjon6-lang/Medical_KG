@@ -4,6 +4,8 @@ from typing import Any, Dict, List, TypedDict
 class AgentState(TypedDict):
     # 输入
     input: str
+    # 当前 LangGraph 运行对应的 job/thread 队列标识
+    runtime_thread_id: str
     # 语义转写的input
     input_semantic_trans: str
     # 是否跟中医有关系

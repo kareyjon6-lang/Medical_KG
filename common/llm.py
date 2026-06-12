@@ -8,7 +8,7 @@ conf = Config()
 my_llm = ChatOpenAI(
     api_key=conf.MODEL_API_KEY,
     base_url=conf.MODEL_BASE_URL,
-    model=conf.MODEL_NAME
+    model=conf.MODEL_NAME,
 )
 
 if __name__ == '__main__':

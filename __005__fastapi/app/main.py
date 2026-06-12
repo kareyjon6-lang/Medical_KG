@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-import re
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +18,7 @@ from common.pg_memory_store import get_memory_store
 
 
 def get_frontend_origins():
-    defaults = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    defaults = ["http://localhost:3010", "http://127.0.0.1:3010"]
     configured = os.getenv("FRONTEND_ORIGINS", "")
     origins = [origin.strip() for origin in configured.split(",") if origin.strip()]
     return defaults + origins
@@ -60,6 +60,31 @@ class AdminUserRequest(BaseModel):
 class ChatThreadRequest(BaseModel):
     title: str = Field(default="新的对话", min_length=1)
     focus_entity: str = ""
+
+
+class ChatJobRequest(BaseModel):
+    input: str = Field(..., min_length=1)
+    thread_id: str = Field(..., min_length=1)
+
+
+@app.on_event("startup")
+async def warmup_runtime_models():
+    try:
+        from common.tcm_entity_extractor import extract_tcm_entities
+
+        await asyncio.to_thread(extract_tcm_entities, "模型预热")
+    except Exception as exc:
+        print(f"实体抽取模型预热失败: {exc}")
+
+    try:
+        from common.embedding_model import embedding_model
+        from __004__langgraph_more_nodes.nodes import match_entity_from_neo4j_node as match_node
+
+        await asyncio.to_thread(embedding_model.encode, ["模型预热"], convert_to_numpy=True)
+        await asyncio.to_thread(match_node.load_index)
+        await asyncio.to_thread(match_node.load_id2text)
+    except Exception as exc:
+        print(f"FAISS/embedding 预热失败: {exc}")
 
 
 @app.get("/api/health")
@@ -233,174 +258,159 @@ async def _legacy_zhongyi_task(input_text, graph_thread_id):
     await put_done_to_msg(graph_thread_id)
 
 
-def graph_direct_answer(input_text: str):
-    text = str(input_text or "").strip()
-    if not text:
-        return None
+def _run_legacy_zhongyi_task_in_worker(input_text, graph_thread_id):
+    asyncio.run(_legacy_zhongyi_task(input_text, graph_thread_id))
 
-    intent_map = [
-        ("ingredients", ("组成", "成分", "药物", "药材", "由什么", "有哪些药")),
-        ("effect", ("功效", "作用", "效用")),
-        ("indication", ("主治", "治疗", "适合", "症状", "病症")),
-        ("usage", ("用法", "服法", "怎么服", "如何服")),
-        ("taboo", ("禁忌", "注意", "不适合", "慎用")),
-        ("source", ("出处", "来源", "出自")),
+
+def stream_event(event_type: str, msg: str = "", progress=None, job_id=None, thread_id=None):
+    payload = {"type": event_type}
+    if msg:
+        payload["msg"] = msg
+    if progress is not None:
+        payload["progress"] = max(0, min(100, int(progress)))
+    if job_id:
+        payload["job_id"] = job_id
+    if thread_id:
+        payload["thread_id"] = thread_id
+    return json.dumps(payload, ensure_ascii=False) + "\n"
+
+
+def infer_progress_from_thought(message: str):
+    text = str(message or "")
+    rules = [
+        (("\u5b8c\u6210", "\u57fa\u4e8e\u77e5\u8bc6\u56fe\u8c31", "\u56de\u7b54"), 98),
+        (("\u5f00\u59cb", "\u57fa\u4e8e\u77e5\u8bc6\u56fe\u8c31", "\u56de\u7b54"), 90),
+        (("\u5b8c\u6210", "Cypher", "\u6267\u884c"), 88),
+        (("\u5f00\u59cb", "Cypher", "\u6267\u884c"), 84),
+        (("\u5b8c\u6210", "Cypher", "\u67e5\u8be2"), 80),
+        (("\u5f00\u59cb", "Cypher", "\u67e5\u8be2"), 72),
+        (("\u5b8c\u6210", "\u5339\u914d", "\u77e5\u8bc6\u56fe\u8c31"), 66),
+        (("\u5f00\u59cb", "\u5339\u914d", "\u77e5\u8bc6\u56fe\u8c31"), 58),
+        (("\u5b8c\u6210", "\u5b9e\u4f53", "\u62bd\u53d6"), 52),
+        (("\u5f00\u59cb", "\u5b9e\u4f53", "\u62bd\u53d6"), 44),
+        (("\u5b8c\u6210", "\u4e2d\u533b\u610f\u56fe"), 40),
+        (("\u5f00\u59cb", "\u8bc6\u522b", "\u4e2d\u533b\u610f\u56fe"), 32),
+        (("\u5b8c\u6210", "\u8bed\u4e49", "\u8f6c\u5199"), 24),
+        (("\u5f00\u59cb", "\u8bed\u4e49", "\u8f6c\u5199"), 14),
     ]
-    requested_keys = [key for key, markers in intent_map if any(marker in text for marker in markers)]
-    if not requested_keys:
-        return None
-
-    entity = extract_formula_query(text)
-    if not entity:
-        return None
-
-    selected = load_formula_for_direct_answer(entity)
-    if not selected:
-        return None
-
-    props = selected.get("properties") or {}
-    pieces = []
-    for key in requested_keys:
-        value = props.get(key)
-        if value:
-            pieces.append(f"{public_property_label(key)}：{value}")
-
-    if not pieces:
-        return None
-
-    name = selected.get("name") or entity
-    answer = f"{name}的{public_intent_summary(requested_keys)}如下：\n" + "\n".join(f"- {piece}" for piece in pieces)
-    thoughts = [
-        f"识别到方剂实体：{name}",
-        f"命中知识图谱字段：{public_intent_summary(requested_keys)}",
-        f"Cypher查询：MATCH (f:Formula)-[r]-(n) WHERE f.name CONTAINS '{name}' RETURN f,r,n LIMIT 80",
-        "已根据图谱属性和关联节点生成回答",
-    ]
-    return {"answer": answer, "thoughts": thoughts}
+    for keywords, progress in rules:
+        if all(keyword in text for keyword in keywords):
+            return progress
+    return None
 
 
-
-def load_formula_for_direct_answer(entity: str):
-    query = """
-    MATCH (f:Formula)
-    WHERE f.name = $query OR toLower(f.name) CONTAINS toLower($query)
-    OPTIONAL MATCH (f)-[:HAS_INGREDIENT]-(herb:Herb)
-    WITH f, collect(DISTINCT herb.name) AS ingredient_names
-    ORDER BY CASE WHEN f.name = $query THEN 0 ELSE 1 END, f.name
-    RETURN properties(f) AS properties,
-           head(labels(f)) AS label,
-           ingredient_names
-    LIMIT 1
-    """
-    try:
-        records = neo4j_client.run_cypher(query, {"query": entity})
-    except Exception:
-        records = []
-    if records:
-        record = records[0]
-        props = dict(record.get("properties") or {})
-        ingredient_names = [name for name in (record.get("ingredient_names") or []) if name]
-        if ingredient_names and not props.get("ingredients"):
-            props["ingredients"] = "\u3001".join(ingredient_names)
-        return {
-            "name": props.get("name") or entity,
-            "label": record.get("label") or "Formula",
-            "properties": {key: value for key, value in props.items() if value not in (None, "")},
-        }
-
-    results = build_search_results(neo4j_client, entity, limit=5, label="Formula")
-    if not results:
-        return None
-    return next((item for item in results if item.get("name") == entity), results[0])
-
-
-def extract_formula_query(text: str):
-    cleaned = re.sub(r"[\uff0c\u3002\uff01\uff1f\uff1b\uff1a\u3001,.!?;:]", " ", text)
-    suffixes = "\u6c64\u4e38\u6563\u996e\u818f\u4e39\u5242\u65b9\u714e"
-    candidates = re.findall(r"[\u4e00-\u9fff]{2,12}[" + suffixes + r"]", cleaned)
-    if candidates:
-        return candidates[0]
-    for marker in ("\u7684", "\u662f", "\u6709", "\u7531"):
-        if marker in cleaned:
-            head = cleaned.split(marker, 1)[0].strip()
-            if 1 < len(head) <= 12:
-                return head
-    return ""
-
-def related_names_for(related: str, prefix: str):
-    names = []
-    for part in re.split(r"[\uff1b;]", str(related or "")):
-        if prefix not in part:
-            continue
-        cleaned = re.sub(r"^.*?[\uff1a:]", "", part)
-        cleaned = re.sub(r"[\uff08(].*?[\uff09)]", "", cleaned).strip()
-        if cleaned:
-            names.append(cleaned)
-    return list(dict.fromkeys(names))
-
-
-def public_property_label(key: str):
-    return {
-        "source": "出处",
-        "ingredients": "组成",
-        "effect": "功效",
-        "usage": "用法",
-        "taboo": "禁忌",
-        "indication": "主治",
-    }.get(key, key)
-
-
-def public_intent_summary(keys):
-    labels = [public_property_label(key) for key in keys]
-    return "、".join(labels)
-
-
-def chunk_text(text: str, size: int = 18):
-    clean = str(text or "")
-    for index in range(0, len(clean), max(1, size)):
-        yield clean[index:index + size]
-
-
-async def generate_legacy_stream(input_text, user, thread_id=None):
+async def generate_job_stream(input_text, user, thread_id=None, job_id=None):
     user_id = user["id"]
     session_id = user.get("session_id")
-    graph_thread_id = thread_id or user_id
+    graph_thread_id = job_id or thread_id or user_id
     assistant_chunks = []
+    thoughts = []
+
+    if job_id:
+        memory_store.update_chat_job(user_id, job_id, status="running", progress=1)
+
     memory_store.append_chat_message(user_id, session_id, "user", input_text, thread_id=thread_id)
     quick_answer = quick_chat_answer(input_text)
     if quick_answer:
-        yield json.dumps({"type": "think", "msg": "识别为日常寒暄，直接生成问候回复  \n"}, ensure_ascii=False) + "\n"
-        yield json.dumps({"type": "stream", "msg": quick_answer}, ensure_ascii=False) + "\n"
-        yield json.dumps({"type": "done"}, ensure_ascii=False) + "\n"
+        thought = "识别为日常寒暄，直接生成回答"
+        thoughts.append(thought)
+        yield stream_event("think", f"{thought}\n", 60, job_id=job_id, thread_id=thread_id)
+        yield stream_event("stream", quick_answer, 95, job_id=job_id, thread_id=thread_id)
+        yield stream_event("done", progress=100, job_id=job_id, thread_id=thread_id)
         memory_store.append_chat_message(user_id, session_id, "assistant", quick_answer, thread_id=thread_id)
+        if job_id:
+            memory_store.update_chat_job(
+                user_id,
+                job_id,
+                status="done",
+                progress=100,
+                thoughts="\n".join(thoughts),
+                answer=quick_answer,
+                finished_at=datetime.now(timezone.utc).isoformat(),
+            )
         return
 
-    direct_answer = graph_direct_answer(input_text)
-    if direct_answer:
-        for thought in direct_answer["thoughts"]:
-            yield json.dumps({"type": "think", "msg": f"{thought}\n"}, ensure_ascii=False) + "\n"
-        for chunk in chunk_text(direct_answer["answer"], 80):
-            yield json.dumps({"type": "stream", "msg": chunk}, ensure_ascii=False) + "\n"
-        yield json.dumps({"type": "done"}, ensure_ascii=False) + "\n"
-        memory_store.append_chat_message(user_id, session_id, "assistant", direct_answer["answer"], thread_id=thread_id)
-        return
+    thought = "进入默认图谱推理链路"
+    thoughts.append(thought)
+    yield stream_event("think", f"{thought}\n", 8, job_id=job_id, thread_id=thread_id)
+    msg_queue = msg_queue_manager.get_msg_queue_by_user_id(graph_thread_id)
+    task = asyncio.create_task(asyncio.to_thread(_run_legacy_zhongyi_task_in_worker, input_text, graph_thread_id))
 
-    task = asyncio.create_task(_legacy_zhongyi_task(input_text, graph_thread_id))
+    try:
+        while True:
+            get_msg_task = asyncio.create_task(msg_queue.get())
+            done_tasks, _ = await asyncio.wait({get_msg_task, task}, return_when=asyncio.FIRST_COMPLETED)
+            if task in done_tasks and get_msg_task not in done_tasks:
+                if msg_queue.empty():
+                    get_msg_task.cancel()
+                    await task
+                    break
+                msg = await get_msg_task
+            else:
+                msg = get_msg_task.result()
+            if msg.get("type") == "stream":
+                assistant_chunks.append(msg.get("msg", ""))
+            if msg.get("type") == "think" and "progress" not in msg:
+                inferred_progress = infer_progress_from_thought(msg.get("msg", ""))
+                if inferred_progress is not None:
+                    msg["progress"] = inferred_progress
+            if job_id:
+                msg["job_id"] = job_id
+            if thread_id:
+                msg["thread_id"] = thread_id
+            if msg.get("type") == "think":
+                thoughts.append(msg.get("msg", "").strip())
+            progress = int(msg.get("progress") or 0)
+            if job_id and progress:
+                memory_store.update_chat_job(user_id, job_id, progress=progress, thoughts="\n".join(thoughts))
+            yield json.dumps(msg, ensure_ascii=False) + "\n"
+            if msg.get("type") == "done":
+                msg_queue_manager.delete_msg_queue_by_user_id(graph_thread_id)
+                break
+            if task.done():
+                await task
 
-    while True:
-        msg_queue = msg_queue_manager.get_msg_queue_by_user_id(graph_thread_id)
-        msg = await msg_queue.get()
-        if msg.get("type") == "stream":
-            assistant_chunks.append(msg.get("msg", ""))
-        yield json.dumps(msg, ensure_ascii=False) + "\n"
-        if msg.get("type") == "done":
-            msg_queue_manager.delete_msg_queue_by_user_id(graph_thread_id)
-            break
+        await task
+        assistant_message = "".join(assistant_chunks).strip()
+        if assistant_message:
+            memory_store.append_chat_message(user_id, session_id, "assistant", assistant_message, thread_id=thread_id)
+        if job_id:
+            memory_store.update_chat_job(
+                user_id,
+                job_id,
+                status="done",
+                progress=100,
+                thoughts="\n".join(thoughts),
+                answer=assistant_message,
+                finished_at=datetime.now(timezone.utc).isoformat(),
+            )
+    except asyncio.CancelledError:
+        task.cancel()
+        msg_queue_manager.delete_msg_queue_by_user_id(graph_thread_id)
+        if job_id:
+            memory_store.update_chat_job(
+                user_id,
+                job_id,
+                status="cancelled",
+                finished_at=datetime.now(timezone.utc).isoformat(),
+            )
+        raise
+    except Exception as exc:
+        msg_queue_manager.delete_msg_queue_by_user_id(graph_thread_id)
+        if job_id:
+            memory_store.update_chat_job(
+                user_id,
+                job_id,
+                status="failed",
+                error=str(exc),
+                finished_at=datetime.now(timezone.utc).isoformat(),
+            )
+        raise
 
-    await task
-    assistant_message = "".join(assistant_chunks).strip()
-    if assistant_message:
-        memory_store.append_chat_message(user_id, session_id, "assistant", assistant_message, thread_id=thread_id)
+
+async def generate_legacy_stream(input_text, user, thread_id=None):
+    async for item in generate_job_stream(input_text, user, thread_id):
+        yield item
 
 
 def quick_chat_answer(input_text: str):
@@ -408,6 +418,12 @@ def quick_chat_answer(input_text: str):
     normalized = normalized.strip("，。！？!?~～,.")
     if normalized in {"你好", "您好", "hello", "hi", "嗨", "在吗", "在嘛"}:
         return "您好，请问您有什么中医相关的问题需要咨询？"
+    if normalized in {"你是谁", "你是什么", "介绍一下你", "你能做什么", "你会做什么"}:
+        return "我是中医知识图谱问答助手，可以围绕方剂、药材、功效、主治、禁忌和关联图谱进行解释。"
+    if normalized in {"谢谢", "感谢", "多谢", "辛苦了"}:
+        return "不客气，您可以继续问我方剂、药材或症状相关问题。"
+    if normalized in {"再见", "拜拜", "bye", "goodbye"}:
+        return "再见，祝您一切顺利。"
     return ""
 
 
@@ -430,7 +446,44 @@ async def process(data: dict, authorization: str = Header(default="")):
             "",
         ])
         return Response(content=payload, media_type="application/x-ndjson")
-    return StreamingResponse(generate_legacy_stream(input_text, user, thread_id), media_type="application/x-ndjson")
+    return StreamingResponse(generate_job_stream(input_text, user, thread_id), media_type="application/x-ndjson")
+
+
+@app.post("/api/chat/jobs")
+async def create_chat_job(request: ChatJobRequest, authorization: str = Header(default="")):
+    user = require_user(authorization)
+    thread = require_thread(user["id"], request.thread_id)
+    memory_store.cancel_active_chat_jobs(user["id"], thread["id"])
+    job = memory_store.create_chat_job(user["id"], user.get("session_id"), thread["id"], request.input)
+    return StreamingResponse(
+        generate_job_stream(request.input, user, thread["id"], job["id"]),
+        media_type="application/x-ndjson",
+    )
+
+
+@app.get("/api/chat/jobs/{job_id}")
+async def get_chat_job(job_id: str, authorization: str = Header(default="")):
+    user = require_user(authorization)
+    job = memory_store.get_chat_job(user["id"], job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Chat job not found.")
+    return {"job": job}
+
+
+@app.post("/api/chat/jobs/{job_id}/cancel")
+async def cancel_chat_job(job_id: str, authorization: str = Header(default="")):
+    user = require_user(authorization)
+    job = memory_store.get_chat_job(user["id"], job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Chat job not found.")
+    memory_store.update_chat_job(
+        user["id"],
+        job_id,
+        status="cancelled",
+        finished_at=datetime.now(timezone.utc).isoformat(),
+    )
+    msg_queue_manager.delete_msg_queue_by_user_id(job_id)
+    return {"job": memory_store.get_chat_job(user["id"], job_id)}
 
 
 def require_user(authorization: str):

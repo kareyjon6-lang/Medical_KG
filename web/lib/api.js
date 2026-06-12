@@ -47,6 +47,11 @@ export function chatThreadMessagesUrl(threadId) {
 }
 
 
+export function chatJobsUrl(jobId = "") {
+  return jobId ? buildApiUrl(`/api/chat/jobs/${encodeURIComponent(jobId)}`) : buildApiUrl("/api/chat/jobs");
+}
+
+
 export async function authRequest(path, username, password) {
   const response = await fetch(buildApiUrl(path), {
     method: "POST",
@@ -163,12 +168,16 @@ export function parseQueuedMessages(buffer) {
 
 
 export async function postChatStream(message, token, onMessage, options = {}) {
-  const response = await fetch(processUrl(), {
+  const response = await fetch(options.useJobEndpoint ? chatJobsUrl() : processUrl(), {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders(token) },
     body: JSON.stringify({ input: message, thread_id: options.threadId || undefined }),
+    signal: options.signal,
   });
   if (!response.ok || !response.body) {
+    if (options.useJobEndpoint && response.status === 404) {
+      throw new Error("后端问答任务接口不存在，请重启 FastAPI 后端到最新代码。");
+    }
     throw new Error(`Streaming chat request failed with ${response.status}`);
   }
 
@@ -189,6 +198,29 @@ export async function postChatStream(message, token, onMessage, options = {}) {
   if (buffer.trim()) {
     parseQueuedMessages(`${buffer}\n`).messages.forEach(onMessage);
   }
+}
+
+
+export async function fetchChatJob(token, jobId) {
+  const response = await fetch(chatJobsUrl(jobId), {
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    throw new Error(`Chat job request failed with ${response.status}`);
+  }
+  return response.json();
+}
+
+
+export async function cancelChatJob(token, jobId) {
+  const response = await fetch(`${chatJobsUrl(jobId)}/cancel`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    throw new Error(`Cancel chat job request failed with ${response.status}`);
+  }
+  return response.json();
 }
 
 

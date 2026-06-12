@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from typing import List
 from pydantic import BaseModel, Field
 from langchain_core.output_parsers import JsonOutputParser
@@ -9,6 +10,7 @@ from langchain_core.runnables import RunnableConfig
 from __004__langgraph_more_nodes.agent_state import AgentState
 from __005__fastapi.__003__msg_queue import put_think_text_to_msg, put_think_text_stream_to_msg, \
     put_think_huiche_text_to_msg
+from __004__langgraph_more_nodes.nodes.runtime_config import get_thread_id
 from common.config import Config
 from common.llm import my_llm
 
@@ -28,9 +30,102 @@ class CypherQueryList(BaseModel):
 parser = JsonOutputParser(pydantic_object=CypherQueryList)
 
 
-async def generate_neo4j_cypher_node(state: AgentState, config: RunnableConfig) -> AgentState:
+def extract_cypher_queries(raw_output):
+    candidates = []
+    parsed = None
+    if isinstance(raw_output, dict):
+        parsed = raw_output
+    else:
+        text = str(raw_output or "").strip()
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.IGNORECASE | re.MULTILINE).strip()
+        for candidate in (text, _extract_first_json_object(text)):
+            if not candidate:
+                continue
+            try:
+                parsed = parser.parse(candidate)
+                break
+            except Exception:
+                try:
+                    parsed = json.loads(candidate)
+                    break
+                except Exception:
+                    continue
+
+    if isinstance(parsed, dict):
+        candidates = parsed.get("cypher") or parsed.get("queries") or []
+    elif isinstance(parsed, list):
+        candidates = parsed
+
+    queries = []
+    for item in candidates:
+        query = item.get("query") if isinstance(item, dict) else item
+        query = str(query or "").strip()
+        if query and query not in queries:
+            queries.append(query)
+    return queries
+
+
+def _extract_first_json_object(text):
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return ""
+    return text[start:end + 1]
+
+
+def build_fallback_cypher_queries(state: AgentState):
+    entity_values = []
+    for key in (
+        "matched_symptoms",
+        "matched_diseases",
+        "matched_formulas",
+        "matched_herbs",
+        "matched_effects",
+        "matched_sources",
+        "user_input_symptoms",
+        "user_input_diseases",
+        "user_input_formulas",
+        "user_input_herbs",
+        "user_input_effects",
+        "user_input_sources",
+    ):
+        for value in state.get(key, []) or []:
+            clean = str(value or "").strip().replace("\\", "\\\\").replace("'", "\\'")
+            if clean and clean not in entity_values:
+                entity_values.append(clean)
+
+    if entity_values:
+        names = ", ".join(f"'{value}'" for value in entity_values[:12])
+        return [
+            (
+                "MATCH (n) "
+                f"WHERE n.name IN [{names}] "
+                "OPTIONAL MATCH (n)-[r]-(related) "
+                "RETURN labels(n) AS entity_labels, properties(n) AS entity, "
+                "type(r) AS relation, labels(related) AS related_labels, properties(related) AS related "
+                "LIMIT 30"
+            )
+        ]
+
+    user_input = str(state.get("input_semantic_trans") or state.get("input") or "").strip()
+    if not user_input:
+        return []
+    query_text = user_input.replace("\\", "\\\\").replace("'", "\\'")
+    return [
+        (
+            "MATCH (n) "
+            f"WHERE n.name IS NOT NULL AND toLower(n.name) CONTAINS toLower('{query_text}') "
+            "OPTIONAL MATCH (n)-[r]-(related) "
+            "RETURN labels(n) AS entity_labels, properties(n) AS entity, "
+            "type(r) AS relation, labels(related) AS related_labels, properties(related) AS related "
+            "LIMIT 30"
+        )
+    ]
+
+
+async def generate_neo4j_cypher_node(state: AgentState, config: RunnableConfig | None = None) -> AgentState:
     # 获取用户ID
-    user_id = config.get("configurable", {}).get("thread_id", "")
+    user_id = get_thread_id(config, state)
     print("开始生成neo4j的cypher语句")
     await put_think_text_to_msg(user_id, "开始生成Cypher查询语句")
     user_input = state["input_semantic_trans"]
@@ -98,7 +193,7 @@ async def generate_neo4j_cypher_node(state: AgentState, config: RunnableConfig) 
             await put_think_text_stream_to_msg(user_id, chunk.content)
             print(chunk.content, end="", flush=True)
         await put_think_huiche_text_to_msg(user_id)
-        result = parser.parse(result)
+        cypher_queries = extract_cypher_queries(result)
         # result = chain.invoke({
         #     "user_input": user_input,
         #     "matched_effects": matched_effects,
@@ -110,19 +205,16 @@ async def generate_neo4j_cypher_node(state: AgentState, config: RunnableConfig) 
         #     "meta_data": meta_data
         # })
         
-        # 从解析结果中提取 cypher 查询列表
-        cypher_queries = []
-        if result and "cypher" in result:
-            for item in result["cypher"]:
-                if isinstance(item, dict) and "query" in item:
-                    cypher_queries.append(item["query"])
-                elif isinstance(item, str):
-                    cypher_queries.append(item)
-        
         state["cypher_query"] = cypher_queries
     except Exception as e:
         print(f"生成 Cypher 查询时出错: {str(e)}")
         state["cypher_query"] = []
+
+    if not state.get("cypher_query"):
+        fallback_queries = build_fallback_cypher_queries(state)
+        if fallback_queries:
+            print(f"Cypher 生成为空，使用兜底图谱证据查询: {fallback_queries}")
+            state["cypher_query"] = fallback_queries
 
     print(f"完成生成neo4j的cypher语句{state['cypher_query']}")
     await put_think_text_to_msg(user_id, f"完成生成Cypher查询语句：{len(state['cypher_query'])}条")
@@ -134,3 +226,6 @@ if __name__ == "__main__":
     config = RunnableConfig(configurable={"thread_id": "test_user"})
     state = asyncio.run(generate_neo4j_cypher_node({"input_semantic_trans": "今天我头疼，我该吃什么药。", "matched_diseases":['头疼', '头痛']}, config))
     print(state)
+
+
+
