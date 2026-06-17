@@ -3083,6 +3083,321 @@ h2 {
   line-height: 1.45;
 }
 
+.admin-scroll-layout {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.admin-knowledge-hero {
+  border-radius: 22px;
+}
+
+.admin-tabs {
+  grid-column: 1 / -1;
+  min-height: 54px;
+  border: 1px solid rgba(20, 61, 43, 0.12);
+  border-radius: 18px;
+  padding: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  background: rgba(255, 250, 240, 0.62);
+  box-shadow: 0 14px 34px rgba(29, 37, 32, 0.06);
+}
+
+.admin-tabs button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 14px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(20, 61, 43, 0.72);
+  background: transparent;
+  font-weight: 900;
+}
+
+.admin-tabs button.active {
+  color: var(--paper-strong);
+  background: var(--ink);
+}
+
+.knowledge-import-workbench,
+.knowledge-history-panel {
+  grid-column: 1 / -1;
+  min-height: 0;
+}
+
+.knowledge-import-workbench {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.86fr) minmax(520px, 1.4fr);
+  gap: 18px;
+}
+
+.knowledge-history-panel {
+  min-height: 0;
+  border: 1px solid rgba(20, 61, 43, 0.12);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 240, 0.88), rgba(239, 232, 211, 0.64)),
+    url("/images/tcm-kg-ambient.png");
+  background-size: auto, 820px auto;
+  background-position: center, right bottom -240px;
+  box-shadow: inset 0 1px 0 rgba(255, 250, 240, 0.86), 0 18px 46px rgba(29, 37, 32, 0.08);
+}
+
+.knowledge-journey {
+  margin: 14px 0 18px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.knowledge-journey span {
+  min-height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: rgba(20, 61, 43, 0.78);
+  background: rgba(225, 236, 213, 0.62);
+  font-weight: 900;
+}
+
+.knowledge-textarea,
+.knowledge-field-grid label {
+  display: grid;
+  gap: 8px;
+  color: rgba(29, 37, 32, 0.7);
+  font-weight: 900;
+}
+
+.knowledge-textarea textarea {
+  min-height: 220px;
+  resize: vertical;
+  border: 1px solid rgba(20, 61, 43, 0.14);
+  border-radius: 18px;
+  padding: 16px;
+  color: var(--charcoal);
+  background: rgba(255, 250, 240, 0.86);
+  line-height: 1.7;
+}
+
+.knowledge-upload {
+  position: relative;
+  margin-top: 14px;
+  min-height: 118px;
+  border: 1px dashed rgba(20, 61, 43, 0.28);
+  border-radius: 20px;
+  padding: 18px;
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  color: rgba(20, 61, 43, 0.72);
+  background: rgba(236, 246, 226, 0.44);
+  text-align: center;
+  overflow: hidden;
+}
+
+.knowledge-upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.knowledge-upload strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.knowledge-upload span {
+  color: rgba(29, 37, 32, 0.58);
+  font-size: 13px;
+}
+
+.knowledge-import-ribbon {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.knowledge-import-ribbon button {
+  min-height: 46px;
+  border: 0;
+  border-radius: 16px;
+  padding: 0 22px;
+  color: var(--paper-strong);
+  background: var(--ink);
+  font-weight: 900;
+}
+
+.knowledge-import-ribbon button:disabled {
+  color: rgba(29, 37, 32, 0.46);
+  background: rgba(20, 61, 43, 0.12);
+}
+
+.knowledge-import-ribbon span {
+  color: rgba(29, 37, 32, 0.64);
+  font-weight: 800;
+}
+
+.knowledge-field-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.knowledge-field-grid label.wide {
+  grid-column: 1 / -1;
+}
+
+.knowledge-field-grid input,
+.knowledge-field-grid textarea,
+.knowledge-relation-row input,
+.knowledge-relation-row select {
+  width: 100%;
+  border: 1px solid rgba(20, 61, 43, 0.14);
+  border-radius: 14px;
+  padding: 0 12px;
+  color: var(--charcoal);
+  background: rgba(255, 250, 240, 0.88);
+}
+
+.knowledge-field-grid input,
+.knowledge-relation-row input,
+.knowledge-relation-row select {
+  height: 42px;
+}
+
+.knowledge-field-grid textarea {
+  min-height: 82px;
+  padding-top: 12px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.knowledge-relation-head {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.knowledge-relation-head h3 {
+  color: var(--ink);
+  font-size: 20px;
+}
+
+.knowledge-relations {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.knowledge-relation-row {
+  display: grid;
+  grid-template-columns: 170px minmax(160px, 1fr) 130px 64px;
+  gap: 8px;
+  align-items: center;
+}
+
+.knowledge-relation-row button {
+  height: 42px;
+  border: 0;
+  border-radius: 14px;
+  color: var(--paper-strong);
+  background: var(--cinnabar);
+  font-weight: 900;
+}
+
+.knowledge-import-ribbon {
+  position: sticky;
+  bottom: 0;
+  border-top: 1px solid rgba(20, 61, 43, 0.1);
+  padding-top: 16px;
+  background: linear-gradient(180deg, rgba(246, 239, 223, 0.2), rgba(246, 239, 223, 0.95));
+}
+
+.knowledge-import-ribbon span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.knowledge-history-panel {
+  padding: 22px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px;
+}
+
+.knowledge-history-list {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.knowledge-history-row {
+  border: 1px solid rgba(20, 61, 43, 0.1);
+  border-radius: 18px;
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(260px, 1.2fr) 190px;
+  gap: 14px;
+  align-items: center;
+  background: rgba(255, 250, 240, 0.62);
+}
+
+.knowledge-history-row.imported {
+  border-color: rgba(78, 143, 90, 0.22);
+  background: rgba(236, 246, 226, 0.52);
+}
+
+.knowledge-history-row.failed {
+  border-color: rgba(185, 71, 46, 0.22);
+  background: rgba(255, 238, 228, 0.52);
+}
+
+.knowledge-history-row strong,
+.knowledge-history-row span {
+  display: block;
+}
+
+.knowledge-history-row strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.knowledge-history-row span,
+.knowledge-history-row p,
+.knowledge-history-row small {
+  color: rgba(29, 37, 32, 0.62);
+}
+
+.knowledge-history-row p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .knowledge-import-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .knowledge-relation-row,
+  .knowledge-history-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .search-main {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -5825,4 +6140,1648 @@ dd {
 .app-shell.view-assistant .message-row .formatted-answer::after {
   display: none !important;
   content: none !important;
+}
+
+/* Knowledge import polish: one-piece parchment workspace */
+.admin-scroll-layout .knowledge-import-workbench,
+.admin-scroll-layout .knowledge-history-panel {
+  grid-column: 1 / -1;
+  min-height: min(720px, calc(100vh - 210px));
+  border: 1px solid rgba(20, 61, 43, 0.12);
+  border-radius: 28px;
+  padding: 22px 26px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 240, 0.9), rgba(238, 232, 214, 0.72)),
+    url("/images/tcm-kg-ambient.png");
+  background-size: auto, 980px auto;
+  background-position: center, right -40px bottom -180px;
+  box-shadow: inset 0 1px 0 rgba(255, 252, 246, 0.88), 0 18px 46px rgba(29, 37, 32, 0.08);
+}
+
+.admin-scroll-layout .knowledge-import-workbench {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  gap: 14px;
+}
+
+.knowledge-workbench-head,
+.knowledge-zone-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.knowledge-workbench-head h2,
+.knowledge-zone-title h3 {
+  margin: 0;
+  color: var(--ink);
+}
+
+.knowledge-workbench-head h2 {
+  font-size: 32px;
+}
+
+.knowledge-zone-title h3 {
+  font-size: 21px;
+}
+
+.admin-scroll-layout .knowledge-journey {
+  margin: 0;
+  max-width: 680px;
+}
+
+.knowledge-unified-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(380px, 0.85fr) minmax(0, 1.15fr);
+  gap: 18px;
+}
+
+.knowledge-source-zone,
+.knowledge-review-zone,
+.knowledge-relation-zone {
+  min-height: 0;
+  border: 1px solid rgba(20, 61, 43, 0.09);
+  border-radius: 22px;
+  background: rgba(255, 250, 240, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.knowledge-source-zone,
+.knowledge-review-zone {
+  padding: 16px;
+  display: grid;
+  grid-template-rows: auto auto auto auto;
+  gap: 12px;
+}
+
+.knowledge-zone-title button,
+.admin-scroll-layout .knowledge-import-ribbon button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 16px;
+  padding: 0 20px;
+  color: var(--paper-strong);
+  background: linear-gradient(135deg, var(--ink), #23633f);
+  font-weight: 900;
+}
+
+.knowledge-zone-title button:disabled,
+.admin-scroll-layout .knowledge-import-ribbon button:disabled {
+  color: rgba(29, 37, 32, 0.42);
+  background: rgba(20, 61, 43, 0.12);
+}
+
+.admin-scroll-layout .knowledge-textarea {
+  gap: 6px;
+}
+
+.admin-scroll-layout .knowledge-textarea textarea {
+  min-height: 210px;
+  max-height: 36vh;
+  resize: vertical;
+  border-radius: 18px;
+  background: rgba(255, 250, 240, 0.72);
+}
+
+.admin-scroll-layout .knowledge-upload {
+  margin-top: 0;
+  min-height: 72px;
+  grid-template-columns: auto 1fr;
+  justify-items: start;
+  place-items: center start;
+  gap: 4px 12px;
+  padding: 12px 16px;
+  text-align: left;
+  background: rgba(231, 240, 219, 0.52);
+}
+
+.admin-scroll-layout .knowledge-upload svg {
+  grid-row: span 2;
+}
+
+.knowledge-status {
+  min-height: 18px;
+  color: rgba(29, 37, 32, 0.62);
+  font-weight: 800;
+}
+
+.admin-scroll-layout .knowledge-field-grid {
+  margin-top: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-scroll-layout .knowledge-field-grid label {
+  gap: 6px;
+}
+
+.admin-scroll-layout .knowledge-field-grid label.wide {
+  grid-column: span 3;
+}
+
+.admin-scroll-layout .knowledge-field-grid input,
+.admin-scroll-layout .knowledge-field-grid textarea {
+  min-height: 44px;
+  border-radius: 16px;
+  background: rgba(255, 250, 240, 0.72);
+}
+
+.admin-scroll-layout .knowledge-field-grid textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.knowledge-relation-zone {
+  padding: 14px 16px;
+}
+
+.admin-scroll-layout .knowledge-relations {
+  max-height: 140px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.admin-scroll-layout .knowledge-relation-row {
+  grid-template-columns: 140px minmax(180px, 1fr) 120px 76px;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(20, 61, 43, 0.08);
+  background: transparent;
+}
+
+.admin-scroll-layout .knowledge-import-ribbon {
+  position: static;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+  background: transparent;
+  justify-content: flex-end;
+}
+
+.admin-scroll-layout .knowledge-import-ribbon span {
+  display: none;
+}
+
+.admin-scroll-layout .knowledge-history-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 18px;
+}
+
+.admin-scroll-layout .knowledge-history-list {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid rgba(20, 61, 43, 0.09);
+  border-radius: 22px;
+  background: rgba(255, 250, 240, 0.34);
+}
+
+.admin-scroll-layout .knowledge-history-row {
+  border: 0;
+  border-bottom: 1px solid rgba(20, 61, 43, 0.08);
+  border-radius: 0;
+  grid-template-columns: 220px 1fr 210px;
+  padding: 16px 20px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.admin-scroll-layout .knowledge-history-row.imported {
+  background: linear-gradient(90deg, rgba(231, 240, 219, 0.56), rgba(255, 250, 240, 0.08));
+}
+
+.admin-scroll-layout .knowledge-history-row.failed {
+  background: linear-gradient(90deg, rgba(255, 236, 226, 0.58), rgba(255, 250, 240, 0.08));
+}
+
+.admin-scroll-layout .knowledge-history-list .empty-note {
+  margin: 28px;
+}
+
+@media (max-width: 1180px) {
+  .knowledge-unified-grid,
+  .admin-scroll-layout .knowledge-relation-row,
+  .admin-scroll-layout .knowledge-history-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-scroll-layout .knowledge-field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-scroll-layout .knowledge-field-grid label.wide {
+    grid-column: span 2;
+  }
+}
+
+/* Admin 100% viewport scale correction */
+.app-shell.view-admin .content-area {
+  padding-top: 24px !important;
+}
+
+.admin-scroll-layout {
+  grid-template-rows: auto auto minmax(0, 1fr) !important;
+  gap: 14px !important;
+}
+
+.admin-scroll-layout .admin-knowledge-hero {
+  min-height: 118px !important;
+  padding: 18px 30px !important;
+  border-radius: 22px !important;
+}
+
+.admin-scroll-layout .admin-knowledge-hero h2 {
+  font-size: 44px !important;
+  line-height: 1.05 !important;
+}
+
+.admin-scroll-layout .admin-knowledge-hero p {
+  margin-top: 10px !important;
+}
+
+.admin-scroll-layout .admin-tabs {
+  min-height: 48px !important;
+  margin-top: 0 !important;
+}
+
+.admin-scroll-layout .knowledge-import-workbench,
+.admin-scroll-layout .knowledge-history-panel {
+  min-height: calc(100vh - 305px) !important;
+  padding: 18px 22px !important;
+  border-radius: 24px !important;
+}
+
+.admin-scroll-layout .knowledge-import-workbench {
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto !important;
+  gap: 12px !important;
+}
+
+.admin-scroll-layout .knowledge-workbench-head {
+  min-height: 48px;
+}
+
+.admin-scroll-layout .knowledge-workbench-head h2 {
+  font-size: 32px !important;
+  line-height: 1.05 !important;
+}
+
+.admin-scroll-layout .knowledge-journey {
+  max-width: 720px !important;
+}
+
+.admin-scroll-layout .knowledge-journey span {
+  min-height: 38px !important;
+}
+
+.admin-scroll-layout .knowledge-unified-grid {
+  grid-template-columns: minmax(520px, 0.92fr) minmax(760px, 1.35fr) !important;
+  gap: 20px !important;
+}
+
+.admin-scroll-layout .knowledge-source-zone,
+.admin-scroll-layout .knowledge-review-zone {
+  padding: 18px 22px !important;
+  gap: 12px !important;
+}
+
+.admin-scroll-layout .knowledge-textarea textarea {
+  min-height: 270px !important;
+  max-height: none !important;
+  font-size: 17px !important;
+}
+
+.admin-scroll-layout .knowledge-upload {
+  min-height: 86px !important;
+  padding: 14px 18px !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 12px 14px !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid input {
+  min-height: 54px !important;
+  font-size: 17px !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid textarea {
+  min-height: 88px !important;
+  font-size: 17px !important;
+}
+
+.admin-scroll-layout .knowledge-relation-zone {
+  padding: 14px 22px !important;
+}
+
+.admin-scroll-layout .knowledge-relations {
+  max-height: 170px !important;
+}
+
+.admin-scroll-layout .knowledge-import-ribbon button {
+  min-height: 48px !important;
+  min-width: 180px !important;
+}
+
+@media (max-width: 1500px) {
+  .admin-scroll-layout .knowledge-unified-grid {
+    grid-template-columns: minmax(460px, 0.9fr) minmax(640px, 1.25fr) !important;
+  }
+
+  .admin-scroll-layout .knowledge-field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .admin-scroll-layout .knowledge-field-grid label.wide {
+    grid-column: span 2 !important;
+  }
+}
+
+/* Admin 100% second pass: stop compressing the form */
+.app-shell.view-admin .workspace {
+  padding: 14px 24px 18px !important;
+  gap: 10px !important;
+}
+
+.app-shell.view-admin .topbar {
+  min-height: 58px !important;
+  align-items: center !important;
+}
+
+.app-shell.view-admin .topbar h1 {
+  font-size: 40px !important;
+  line-height: 1 !important;
+}
+
+.admin-scroll-layout .admin-knowledge-hero {
+  min-height: 88px !important;
+  padding: 14px 26px !important;
+}
+
+.admin-scroll-layout .admin-knowledge-hero h2 {
+  font-size: 36px !important;
+}
+
+.admin-scroll-layout .admin-knowledge-hero p {
+  font-size: 16px !important;
+}
+
+.admin-scroll-layout .admin-stats span {
+  min-height: 40px !important;
+}
+
+.admin-scroll-layout .admin-tabs {
+  min-height: 42px !important;
+  padding: 4px !important;
+}
+
+.admin-scroll-layout .admin-tabs button {
+  min-height: 34px !important;
+}
+
+.admin-scroll-layout .knowledge-import-workbench {
+  height: calc(100dvh - 250px) !important;
+  min-height: 620px !important;
+  overflow: auto !important;
+  grid-template-rows: auto minmax(0, 1fr) auto auto !important;
+}
+
+.admin-scroll-layout .knowledge-import-workbench > .knowledge-workbench-head {
+  display: none !important;
+}
+
+.admin-scroll-layout .knowledge-unified-grid {
+  min-height: 0 !important;
+  align-items: stretch !important;
+}
+
+.admin-scroll-layout .knowledge-source-zone,
+.admin-scroll-layout .knowledge-review-zone {
+  align-content: start !important;
+}
+
+.admin-scroll-layout .knowledge-textarea textarea {
+  min-height: 310px !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid input,
+.admin-scroll-layout .knowledge-field-grid textarea {
+  width: 100% !important;
+}
+
+.admin-scroll-layout .knowledge-relation-zone {
+  min-height: 122px !important;
+}
+
+.admin-scroll-layout .knowledge-history-panel {
+  height: calc(100dvh - 250px) !important;
+  min-height: 620px !important;
+}
+
+/* Admin 100% final density pass: shrink the previous oversized layout */
+.app-shell.view-admin .workspace {
+  padding: 8px 20px 14px !important;
+  gap: 8px !important;
+}
+
+.app-shell.view-admin .topbar {
+  min-height: 46px !important;
+}
+
+.app-shell.view-admin .topbar h1 {
+  font-size: 34px !important;
+}
+
+.admin-scroll-layout {
+  gap: 10px !important;
+}
+
+.admin-scroll-layout .admin-knowledge-hero {
+  min-height: 76px !important;
+  padding: 10px 22px !important;
+  border-radius: 18px !important;
+}
+
+.admin-scroll-layout .admin-knowledge-hero h2 {
+  font-size: 30px !important;
+}
+
+.admin-scroll-layout .admin-knowledge-hero p {
+  margin-top: 6px !important;
+  font-size: 14px !important;
+}
+
+.admin-scroll-layout .admin-stats {
+  gap: 8px !important;
+}
+
+.admin-scroll-layout .admin-stats span {
+  min-height: 34px !important;
+  padding: 0 12px !important;
+  font-size: 14px !important;
+}
+
+.admin-scroll-layout .admin-tabs {
+  min-height: 38px !important;
+  padding: 3px !important;
+  border-radius: 15px !important;
+}
+
+.admin-scroll-layout .admin-tabs button {
+  min-height: 30px !important;
+  padding: 0 13px !important;
+  border-radius: 12px !important;
+  font-size: 14px !important;
+}
+
+.admin-scroll-layout .knowledge-import-workbench,
+.admin-scroll-layout .knowledge-history-panel {
+  height: calc(100dvh - 198px) !important;
+  min-height: 0 !important;
+  padding: 14px 18px !important;
+  border-radius: 20px !important;
+}
+
+.admin-scroll-layout .knowledge-import-workbench {
+  gap: 9px !important;
+  grid-template-rows: auto minmax(0, 1fr) auto auto !important;
+}
+
+.admin-scroll-layout .knowledge-journey span {
+  min-height: 30px !important;
+  font-size: 14px !important;
+}
+
+.admin-scroll-layout .knowledge-unified-grid {
+  grid-template-columns: minmax(360px, 0.88fr) minmax(560px, 1.24fr) !important;
+  gap: 12px !important;
+}
+
+.admin-scroll-layout .knowledge-source-zone,
+.admin-scroll-layout .knowledge-review-zone {
+  padding: 12px 14px !important;
+  border-radius: 18px !important;
+  gap: 8px !important;
+}
+
+.admin-scroll-layout .knowledge-zone-title h3 {
+  font-size: 18px !important;
+}
+
+.admin-scroll-layout .knowledge-zone-title button {
+  min-height: 36px !important;
+  padding: 0 16px !important;
+  border-radius: 13px !important;
+  font-size: 14px !important;
+}
+
+.admin-scroll-layout .knowledge-textarea textarea {
+  min-height: 190px !important;
+  font-size: 14px !important;
+  line-height: 1.55 !important;
+}
+
+.admin-scroll-layout .knowledge-upload {
+  min-height: 56px !important;
+  padding: 8px 12px !important;
+}
+
+.admin-scroll-layout .knowledge-upload strong {
+  font-size: 15px !important;
+}
+
+.admin-scroll-layout .knowledge-upload span,
+.admin-scroll-layout .knowledge-status {
+  font-size: 12px !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px 10px !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid label {
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid input {
+  min-height: 38px !important;
+  font-size: 14px !important;
+  border-radius: 13px !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid textarea {
+  min-height: 58px !important;
+  font-size: 14px !important;
+  border-radius: 13px !important;
+}
+
+.admin-scroll-layout .knowledge-relation-zone {
+  min-height: 82px !important;
+  padding: 10px 14px !important;
+  border-radius: 18px !important;
+}
+
+.admin-scroll-layout .knowledge-relation-head h3 {
+  font-size: 17px !important;
+}
+
+.admin-scroll-layout .knowledge-relations {
+  max-height: 88px !important;
+}
+
+.admin-scroll-layout .knowledge-relation-row {
+  grid-template-columns: 120px minmax(160px, 1fr) 110px 64px !important;
+  gap: 8px !important;
+  padding: 6px 0 !important;
+}
+
+.admin-scroll-layout .knowledge-relation-row select,
+.admin-scroll-layout .knowledge-relation-row input {
+  min-height: 34px !important;
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .knowledge-relation-row button {
+  height: 34px !important;
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .knowledge-import-ribbon button {
+  min-height: 38px !important;
+  min-width: 150px !important;
+  border-radius: 14px !important;
+  font-size: 14px !important;
+}
+
+@media (max-width: 1500px) {
+  .admin-scroll-layout .knowledge-unified-grid {
+    grid-template-columns: minmax(330px, 0.85fr) minmax(460px, 1.15fr) !important;
+  }
+}
+
+/* Admin 100% usability pass: every action button must be visible without page scroll. */
+.app-shell.view-admin .workspace {
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  padding: 8px 20px 12px !important;
+  gap: 8px !important;
+  overflow: hidden !important;
+}
+
+.app-shell.view-admin .topbar {
+  min-height: 42px !important;
+  align-items: center !important;
+}
+
+.app-shell.view-admin .topbar h1 {
+  font-size: 32px !important;
+  line-height: 1 !important;
+}
+
+.admin-scroll-layout {
+  height: 100% !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  gap: 8px !important;
+  overflow: hidden !important;
+}
+
+.admin-scroll-layout .admin-knowledge-hero {
+  display: none !important;
+}
+
+.admin-scroll-layout .admin-tabs {
+  min-height: 36px !important;
+  padding: 3px !important;
+  border-radius: 15px !important;
+}
+
+.admin-scroll-layout .admin-tabs button {
+  min-height: 30px !important;
+  padding: 0 14px !important;
+  font-size: 14px !important;
+}
+
+.admin-scroll-layout .knowledge-import-workbench,
+.admin-scroll-layout .knowledge-history-panel {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  padding: 12px 16px !important;
+  border-radius: 20px !important;
+  overflow: hidden !important;
+}
+
+.admin-scroll-layout .knowledge-import-workbench {
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) auto auto !important;
+  gap: 8px !important;
+}
+
+.admin-scroll-layout .knowledge-import-workbench > .knowledge-workbench-head {
+  display: none !important;
+}
+
+.admin-scroll-layout .knowledge-journey {
+  max-width: 760px !important;
+}
+
+.admin-scroll-layout .knowledge-journey span {
+  min-height: 28px !important;
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .knowledge-unified-grid {
+  min-height: 0 !important;
+  grid-template-columns: minmax(340px, 0.84fr) minmax(560px, 1.16fr) !important;
+  gap: 10px !important;
+  overflow: hidden !important;
+}
+
+.admin-scroll-layout .knowledge-source-zone,
+.admin-scroll-layout .knowledge-review-zone {
+  min-height: 0 !important;
+  padding: 10px 12px !important;
+  border-radius: 16px !important;
+  gap: 7px !important;
+  overflow: hidden !important;
+}
+
+.admin-scroll-layout .knowledge-zone-title h3,
+.admin-scroll-layout .knowledge-relation-head h3 {
+  font-size: 17px !important;
+}
+
+.admin-scroll-layout .knowledge-zone-title button {
+  min-height: 34px !important;
+  padding: 0 15px !important;
+  border-radius: 12px !important;
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .knowledge-textarea textarea {
+  min-height: 165px !important;
+  max-height: 24vh !important;
+  padding: 12px !important;
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+}
+
+.admin-scroll-layout .knowledge-upload {
+  min-height: 48px !important;
+  padding: 7px 10px !important;
+  border-radius: 14px !important;
+}
+
+.admin-scroll-layout .knowledge-upload strong {
+  font-size: 14px !important;
+}
+
+.admin-scroll-layout .knowledge-upload span,
+.admin-scroll-layout .knowledge-status,
+.admin-scroll-layout .knowledge-field-grid label {
+  font-size: 12px !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid {
+  min-height: 0 !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 7px 9px !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid input {
+  min-height: 34px !important;
+  padding: 0 11px !important;
+  border-radius: 12px !important;
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid textarea {
+  min-height: 48px !important;
+  padding: 9px 11px !important;
+  border-radius: 12px !important;
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .knowledge-relation-zone {
+  min-height: 76px !important;
+  max-height: 92px !important;
+  padding: 8px 12px !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+}
+
+.admin-scroll-layout .knowledge-relation-head {
+  margin-bottom: 4px !important;
+}
+
+.admin-scroll-layout .knowledge-relations {
+  max-height: 36px !important;
+  overflow: auto !important;
+}
+
+.admin-scroll-layout .knowledge-relation-row {
+  grid-template-columns: 116px minmax(160px, 1fr) 104px 58px !important;
+  gap: 7px !important;
+  padding: 3px 0 !important;
+}
+
+.admin-scroll-layout .knowledge-relation-row select,
+.admin-scroll-layout .knowledge-relation-row input,
+.admin-scroll-layout .knowledge-relation-row button {
+  min-height: 30px !important;
+  height: 30px !important;
+  font-size: 12px !important;
+  border-radius: 10px !important;
+}
+
+.admin-scroll-layout .knowledge-import-ribbon {
+  min-height: 36px !important;
+  align-items: center !important;
+}
+
+.admin-scroll-layout .knowledge-import-ribbon button {
+  min-height: 34px !important;
+  min-width: 144px !important;
+  border-radius: 12px !important;
+  font-size: 13px !important;
+}
+
+@media (max-width: 1500px) {
+  .admin-scroll-layout .knowledge-unified-grid {
+    grid-template-columns: minmax(300px, 0.82fr) minmax(430px, 1.18fr) !important;
+  }
+}
+
+/* Admin 100% authoritative layout: single source of truth for the backstage pages. */
+.app-shell.view-admin .workspace {
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  padding: 8px 20px 12px !important;
+  gap: 8px !important;
+  overflow: hidden !important;
+}
+
+.app-shell.view-admin .topbar {
+  min-height: 42px !important;
+  align-items: center !important;
+}
+
+.app-shell.view-admin .topbar h1 {
+  font-size: 32px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+.admin-scroll-layout {
+  height: 100% !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  gap: 8px !important;
+  overflow: hidden !important;
+}
+
+.admin-scroll-layout .admin-knowledge-hero {
+  display: none !important;
+}
+
+.admin-scroll-layout .admin-tabs {
+  grid-column: 1 / -1 !important;
+  min-height: 36px !important;
+  width: fit-content !important;
+  padding: 3px !important;
+  border-radius: 15px !important;
+  background: rgba(255, 250, 240, 0.72) !important;
+  backdrop-filter: blur(18px) !important;
+}
+
+.admin-scroll-layout .admin-tabs button {
+  min-height: 30px !important;
+  padding: 0 14px !important;
+  border-radius: 12px !important;
+  font-size: 14px !important;
+  white-space: nowrap !important;
+}
+
+.admin-scroll-layout .knowledge-import-workbench,
+.admin-scroll-layout .knowledge-history-panel,
+.admin-scroll-layout .admin-users-workspace {
+  grid-column: 1 / -1 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+
+.admin-scroll-layout .knowledge-import-workbench,
+.admin-scroll-layout .knowledge-history-panel {
+  border: 1px solid rgba(20, 61, 43, 0.1) !important;
+  border-radius: 20px !important;
+  padding: 12px 16px !important;
+  background: rgba(255, 250, 240, 0.42) !important;
+  background-image: none !important;
+  box-shadow: 0 18px 44px rgba(29, 37, 32, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.54) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.admin-scroll-layout .knowledge-import-workbench {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: auto minmax(0, 1fr) auto auto !important;
+  gap: 8px !important;
+}
+
+.admin-scroll-layout .knowledge-import-workbench > .knowledge-workbench-head {
+  display: none !important;
+}
+
+.admin-scroll-layout .knowledge-journey {
+  margin: 0 !important;
+  max-width: 760px !important;
+}
+
+.admin-scroll-layout .knowledge-journey span {
+  min-height: 28px !important;
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .knowledge-unified-grid {
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-columns: minmax(320px, 0.84fr) minmax(520px, 1.16fr) !important;
+  gap: 10px !important;
+  overflow: hidden !important;
+}
+
+.admin-scroll-layout .knowledge-source-zone,
+.admin-scroll-layout .knowledge-review-zone,
+.admin-scroll-layout .knowledge-relation-zone,
+.admin-scroll-layout .admin-create,
+.admin-scroll-layout .admin-users {
+  border: 1px solid rgba(20, 61, 43, 0.08) !important;
+  border-radius: 16px !important;
+  background: rgba(255, 250, 240, 0.34) !important;
+  background-image: none !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+.admin-scroll-layout .knowledge-source-zone,
+.admin-scroll-layout .knowledge-review-zone {
+  min-height: 0 !important;
+  padding: 10px 12px !important;
+  display: grid !important;
+  align-content: start !important;
+  gap: 7px !important;
+  overflow: hidden !important;
+}
+
+.admin-scroll-layout .knowledge-zone-title h3,
+.admin-scroll-layout .knowledge-relation-head h3 {
+  margin: 0 !important;
+  font-size: 17px !important;
+  line-height: 1.05 !important;
+}
+
+.admin-scroll-layout .knowledge-zone-title button {
+  min-height: 34px !important;
+  padding: 0 15px !important;
+  border-radius: 12px !important;
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .knowledge-textarea textarea {
+  min-height: 158px !important;
+  max-height: 22vh !important;
+  padding: 12px !important;
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+}
+
+.admin-scroll-layout .knowledge-upload {
+  min-height: 46px !important;
+  padding: 7px 10px !important;
+  border-radius: 14px !important;
+}
+
+.admin-scroll-layout .knowledge-upload strong {
+  font-size: 14px !important;
+}
+
+.admin-scroll-layout .knowledge-upload span,
+.admin-scroll-layout .knowledge-status,
+.admin-scroll-layout .knowledge-field-grid label {
+  font-size: 12px !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid {
+  margin: 0 !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 7px 9px !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid label {
+  gap: 4px !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid label.wide {
+  grid-column: span 3 !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid input {
+  min-height: 32px !important;
+  padding: 0 10px !important;
+  border-radius: 11px !important;
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .knowledge-field-grid textarea {
+  min-height: 44px !important;
+  padding: 8px 10px !important;
+  border-radius: 11px !important;
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .knowledge-relation-zone {
+  min-height: 72px !important;
+  max-height: 86px !important;
+  padding: 8px 12px !important;
+  overflow: hidden !important;
+}
+
+.admin-scroll-layout .knowledge-relation-head {
+  margin-bottom: 4px !important;
+}
+
+.admin-scroll-layout .knowledge-relations {
+  max-height: 34px !important;
+  overflow: auto !important;
+}
+
+.admin-scroll-layout .knowledge-relation-row {
+  grid-template-columns: 112px minmax(150px, 1fr) 100px 56px !important;
+  gap: 7px !important;
+  padding: 2px 0 !important;
+}
+
+.admin-scroll-layout .knowledge-relation-row select,
+.admin-scroll-layout .knowledge-relation-row input,
+.admin-scroll-layout .knowledge-relation-row button {
+  min-height: 30px !important;
+  height: 30px !important;
+  font-size: 12px !important;
+  border-radius: 10px !important;
+}
+
+.admin-scroll-layout .knowledge-import-ribbon {
+  min-height: 34px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.admin-scroll-layout .knowledge-delete-tool {
+  min-width: 0 !important;
+  display: grid !important;
+  grid-template-columns: auto minmax(180px, 280px) 64px !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.admin-scroll-layout .knowledge-delete-tool span {
+  color: var(--cinnabar) !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  white-space: nowrap !important;
+}
+
+.admin-scroll-layout .knowledge-delete-tool input {
+  height: 32px !important;
+  min-width: 0 !important;
+  border: 1px solid rgba(20, 61, 43, 0.14) !important;
+  border-radius: 11px !important;
+  padding: 0 10px !important;
+  color: var(--charcoal) !important;
+  background: rgba(255, 250, 240, 0.78) !important;
+}
+
+.admin-scroll-layout .knowledge-import-ribbon button {
+  min-height: 32px !important;
+  min-width: 140px !important;
+  border-radius: 12px !important;
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .knowledge-import-ribbon button.danger {
+  min-width: 64px !important;
+  color: var(--paper-strong) !important;
+  background: var(--cinnabar) !important;
+}
+
+.admin-scroll-layout .knowledge-history-panel {
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  gap: 10px !important;
+}
+
+.admin-scroll-layout .knowledge-history-panel .knowledge-workbench-head {
+  min-height: 34px !important;
+  display: flex !important;
+}
+
+.admin-scroll-layout .knowledge-history-panel .knowledge-workbench-head h2 {
+  margin: 0 !important;
+  color: var(--ink) !important;
+  font-size: 28px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+.admin-scroll-layout .knowledge-history-list {
+  min-height: 0 !important;
+  overflow: auto !important;
+  border-radius: 16px !important;
+  background: rgba(255, 250, 240, 0.28) !important;
+  background-image: none !important;
+}
+
+.admin-scroll-layout .knowledge-history-row {
+  min-height: 44px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 12px !important;
+  align-items: center !important;
+  padding: 9px 14px !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(20, 61, 43, 0.08) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+.admin-scroll-layout .knowledge-history-row strong {
+  color: #102f24 !important;
+  font-size: 15px !important;
+  font-weight: 950 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.admin-scroll-layout .knowledge-history-row span,
+.admin-scroll-layout .knowledge-history-row small {
+  color: rgba(29, 37, 32, 0.64) !important;
+  font-size: 12px !important;
+  white-space: nowrap !important;
+}
+
+.admin-scroll-layout .admin-users-workspace {
+  display: grid !important;
+  grid-template-rows: 210px minmax(0, 1fr) !important;
+  gap: 10px !important;
+}
+
+.admin-scroll-layout .admin-create,
+.admin-scroll-layout .admin-users {
+  min-height: 0 !important;
+  padding: 12px 16px !important;
+  overflow: hidden !important;
+}
+
+.admin-scroll-layout .admin-create {
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) auto !important;
+  gap: 8px !important;
+}
+
+.admin-scroll-layout .admin-create .panel-heading,
+.admin-scroll-layout .admin-users .panel-heading {
+  margin: 0 !important;
+}
+
+.admin-scroll-layout .admin-create .panel-heading h2,
+.admin-scroll-layout .admin-users .panel-heading h2 {
+  font-size: 22px !important;
+  line-height: 1.05 !important;
+}
+
+.admin-scroll-layout .admin-form {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr 180px 160px !important;
+  gap: 8px !important;
+  align-items: end !important;
+}
+
+.admin-scroll-layout .admin-form label {
+  gap: 4px !important;
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .admin-form input,
+.admin-scroll-layout .admin-form select {
+  height: 34px !important;
+  border-radius: 11px !important;
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .admin-form button {
+  min-height: 34px !important;
+  border-radius: 11px !important;
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .admin-status {
+  margin: 0 !important;
+  min-height: 16px !important;
+  font-size: 12px !important;
+}
+
+.admin-scroll-layout .admin-users {
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  gap: 8px !important;
+}
+
+.admin-scroll-layout .user-table {
+  min-height: 0 !important;
+  overflow: auto !important;
+  gap: 7px !important;
+}
+
+.admin-scroll-layout .user-row {
+  min-height: 42px !important;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 0.9fr) 72px !important;
+  padding: 8px 10px !important;
+  border-radius: 12px !important;
+  background: rgba(255, 250, 240, 0.58) !important;
+}
+
+.admin-scroll-layout .user-row strong {
+  font-size: 13px !important;
+}
+
+.admin-scroll-layout .user-row span,
+.admin-scroll-layout .user-row small {
+  font-size: 12px !important;
+}
+
+.admin-scroll-layout .user-row button {
+  min-height: 30px !important;
+  border-radius: 10px !important;
+  font-size: 12px !important;
+}
+
+@media (max-width: 1500px) {
+  .admin-scroll-layout .knowledge-unified-grid {
+    grid-template-columns: minmax(300px, 0.82fr) minmax(430px, 1.18fr) !important;
+  }
+
+  .admin-scroll-layout .admin-form {
+    grid-template-columns: 1fr 1fr 150px 130px !important;
+  }
+}
+
+/* Current knowledge workflow: identify -> preview graph -> confirm record */
+.admin-scroll-layout .knowledge-import-workbench {
+  grid-template-rows: auto auto minmax(0, 1fr) !important;
+  gap: 10px !important;
+}
+
+.admin-scroll-layout .knowledge-journey {
+  max-width: 760px !important;
+  margin: 0 !important;
+}
+
+.admin-scroll-layout .knowledge-unified-grid {
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-columns: minmax(360px, 0.72fr) minmax(560px, 1.28fr) !important;
+  gap: 14px !important;
+}
+
+.admin-scroll-layout .knowledge-source-zone,
+.admin-scroll-layout .knowledge-preview-zone {
+  min-height: 0 !important;
+  border: 1px solid rgba(20, 61, 43, 0.1) !important;
+  border-radius: 20px !important;
+  background: rgba(255, 250, 240, 0.44) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46) !important;
+}
+
+.admin-scroll-layout .knowledge-source-zone {
+  display: grid !important;
+  grid-template-rows: auto minmax(190px, 1fr) auto auto auto !important;
+  gap: 10px !important;
+  padding: 14px !important;
+}
+
+.admin-scroll-layout .knowledge-textarea textarea {
+  min-height: 210px !important;
+  height: 100% !important;
+  resize: none !important;
+}
+
+.admin-scroll-layout .knowledge-delete-tool {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) 72px !important;
+  gap: 8px !important;
+}
+
+.admin-scroll-layout .knowledge-confirm-button {
+  width: 100% !important;
+  min-height: 38px !important;
+  border: 0 !important;
+  border-radius: 13px !important;
+  color: var(--paper-strong) !important;
+  background: linear-gradient(135deg, var(--ink), #23633f) !important;
+  font-weight: 950 !important;
+}
+
+.admin-scroll-layout .knowledge-preview-zone {
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) auto !important;
+  gap: 10px !important;
+  padding: 14px !important;
+  overflow: hidden !important;
+}
+
+.knowledge-preview-count {
+  color: rgba(20, 61, 43, 0.66) !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+}
+
+.knowledge-preview-scene {
+  position: relative !important;
+  min-height: 0 !important;
+  border-radius: 18px !important;
+  overflow: hidden !important;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 250, 240, 0.78), transparent 34%),
+    linear-gradient(135deg, rgba(8, 48, 36, 0.92), rgba(13, 83, 54, 0.82)) !important;
+}
+
+.knowledge-preview-scene .three-graph-mount,
+.knowledge-preview-scene .three-graph-canvas,
+.knowledge-preview-scene .kg-canvas {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 360px !important;
+}
+
+.knowledge-preview-empty {
+  height: 100% !important;
+  min-height: 360px !important;
+  display: grid !important;
+  place-content: center !important;
+  justify-items: center !important;
+  gap: 10px !important;
+  padding: 28px !important;
+  color: rgba(255, 250, 240, 0.86) !important;
+  text-align: center !important;
+}
+
+.knowledge-preview-empty strong {
+  font-size: 22px !important;
+}
+
+.knowledge-preview-empty span {
+  max-width: 420px !important;
+  color: rgba(255, 250, 240, 0.66) !important;
+  line-height: 1.7 !important;
+}
+
+.knowledge-preview-summary {
+  min-height: 42px !important;
+  display: grid !important;
+  grid-template-columns: minmax(160px, 0.45fr) minmax(0, 1fr) !important;
+  gap: 12px !important;
+  align-items: center !important;
+  color: rgba(29, 37, 32, 0.66) !important;
+  font-size: 13px !important;
+}
+
+.knowledge-preview-summary strong {
+  color: var(--ink) !important;
+  font-size: 17px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.knowledge-preview-summary span {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.admin-scroll-layout .knowledge-history-row {
+  grid-template-columns: 86px minmax(180px, 1fr) minmax(220px, 0.8fr) 86px !important;
+}
+
+.operation-badge {
+  width: fit-content !important;
+  min-width: 54px !important;
+  border-radius: 999px !important;
+  padding: 5px 10px !important;
+  color: var(--paper-strong) !important;
+  text-align: center !important;
+  font-weight: 950 !important;
+}
+
+.operation-badge.add {
+  background: #1f6b47 !important;
+}
+
+.operation-badge.delete {
+  background: var(--cinnabar) !important;
+}
+
+.login-entry-switch {
+  grid-template-columns: repeat(3, 1fr) !important;
+}
+
+.login-entry-switch button {
+  transition: transform 180ms ease, background 220ms ease, color 220ms ease, box-shadow 220ms ease !important;
+}
+
+.login-entry-switch button:hover {
+  transform: translateY(-1px) !important;
+}
+
+.password-field {
+  position: relative !important;
+}
+
+.password-field input {
+  padding-right: 48px !important;
+}
+
+.password-field button {
+  position: absolute !important;
+  right: 8px !important;
+  top: 50% !important;
+  width: 36px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 !important;
+  transform: translateY(-50%) !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  color: rgba(20, 61, 43, 0.74) !important;
+  background: rgba(231, 240, 219, 0.78) !important;
+  transition: background 180ms ease, transform 180ms ease !important;
+}
+
+.password-field button:hover {
+  background: rgba(200, 216, 184, 0.92) !important;
+  transform: translateY(-50%) scale(1.04) !important;
+}
+
+@media (max-width: 1400px) {
+  .admin-scroll-layout .knowledge-unified-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .admin-scroll-layout .knowledge-import-workbench {
+    overflow: auto !important;
+  }
+}
+
+/* Stability pass: every chat turn owns its vertical space; only avatars and bubbles are painted. */
+.app-shell.view-assistant .message-list {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 28px !important;
+  padding: 18px 24px 34px !important;
+  background: transparent !important;
+  overflow-x: hidden !important;
+}
+
+.app-shell.view-assistant .message-row {
+  position: relative !important;
+  display: flex !important;
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  clear: both !important;
+  isolation: isolate !important;
+}
+
+.app-shell.view-assistant .message-row.assistant {
+  justify-content: flex-start !important;
+}
+
+.app-shell.view-assistant .message-row.user {
+  justify-content: flex-end !important;
+}
+
+.app-shell.view-assistant .message-cluster {
+  display: inline-flex !important;
+  flex: 0 1 auto !important;
+  align-items: flex-start !important;
+  gap: 14px !important;
+  width: auto !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.app-shell.view-assistant .message-row.user .message-cluster {
+  flex-direction: row-reverse !important;
+  margin-left: auto !important;
+}
+
+.app-shell.view-assistant .message-row.assistant .message-cluster {
+  margin-right: auto !important;
+}
+
+.app-shell.view-assistant .message-cluster > span {
+  flex: 0 0 48px !important;
+  width: 48px !important;
+  height: 48px !important;
+}
+
+.app-shell.view-assistant .message-row .formatted-answer {
+  width: auto !important;
+  max-width: min(760px, calc(100% - 66px)) !important;
+  margin: 0 !important;
+  overflow-wrap: anywhere !important;
+}
+
+.app-shell.view-assistant .message-row.user .formatted-answer {
+  max-width: min(520px, calc(100% - 66px)) !important;
+}
+
+/* 2026-06-16: keep short chat turns on one line when the viewport has room. */
+.app-shell.view-assistant .message-row .formatted-answer {
+  max-width: min(980px, calc(100% - 66px)) !important;
+  overflow-wrap: break-word !important;
+  word-break: normal !important;
+  white-space: normal !important;
+}
+
+.app-shell.view-assistant .message-row.user .formatted-answer {
+  max-width: min(760px, calc(100% - 66px)) !important;
+}
+
+.app-shell.view-assistant .message-row .formatted-answer p {
+  max-width: 100% !important;
+  margin: 0 !important;
+}
+
+.app-shell.view-assistant .message-row .formatted-answer.compact-answer {
+  flex: 0 0 auto !important;
+  width: max-content !important;
+  white-space: nowrap !important;
+}
+
+.app-shell.view-assistant .message-row .formatted-answer.compact-answer p {
+  white-space: nowrap !important;
+}
+
+@media (max-width: 760px) {
+  .app-shell.view-assistant .message-row .formatted-answer.compact-answer {
+    flex: 0 1 auto !important;
+    width: auto !important;
+    white-space: normal !important;
+  }
+
+  .app-shell.view-assistant .message-row .formatted-answer.compact-answer p {
+    white-space: normal !important;
+  }
+}
+
+.knowledge-preview-legend {
+  position: absolute !important;
+  right: 18px !important;
+  bottom: 16px !important;
+  display: grid !important;
+  gap: 7px !important;
+  max-width: min(560px, calc(100% - 36px)) !important;
+  padding: 9px 12px !important;
+  border-radius: 16px !important;
+  background: rgba(10, 45, 34, 0.52) !important;
+  color: rgba(255, 250, 240, 0.9) !important;
+  backdrop-filter: blur(12px) !important;
+  box-shadow: 0 10px 24px rgba(3, 27, 19, 0.2) !important;
+}
+
+.knowledge-preview-legend div {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 6px 10px !important;
+}
+
+.knowledge-preview-legend b {
+  color: rgba(255, 250, 240, 0.68) !important;
+  font-size: 12px !important;
+  font-weight: 950 !important;
+}
+
+.knowledge-preview-legend span {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+}
+
+.knowledge-preview-legend i {
+  width: 9px !important;
+  height: 9px !important;
+  border-radius: 999px !important;
+  box-shadow: 0 0 0 2px rgba(255, 250, 240, 0.24) !important;
+}
+
+.knowledge-preview-legend i.line-swatch {
+  width: 18px !important;
+  height: 3px !important;
+  border-radius: 999px !important;
+}
+
+.login-shell-v2 .password-field button.visible {
+  color: #fffaf0 !important;
+  background: #111 !important;
+}
+
+.login-shell-v2.password-visible .creature .eye,
+.login-shell-v2.password-visible .creature .pupil {
+  transform: translate(5px, -1px) scale(1.08) !important;
+  transition: transform 220ms ease !important;
+}
+
+.login-shell-v2.password-hidden.has-password .creature-bottle,
+.login-shell-v2.password-hidden.has-password .creature-cabinet {
+  transform: translateY(8px) rotate(-2deg) !important;
+}
+
+.login-shell-v2.password-hidden.has-password .creature .eye::after {
+  transform: scaleX(1) !important;
 }

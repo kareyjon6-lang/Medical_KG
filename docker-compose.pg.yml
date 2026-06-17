@@ -1,3 +1,4 @@
+# 本地 PostgreSQL 示例编排，供当前方药增删与问答页版本使用。
 services:
   medical-kg-postgres:
     image: postgres:16-alpine

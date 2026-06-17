@@ -2,6 +2,7 @@
 给知识图谱中实体名字进行向量化存储，用户输入的实体进行向量数据库的检索
 FAISS 向量存储 Demo
 接收文本列表，使用 embedding 模型转换为向量，存储到 FAISS 索引中，
+普通方药增删主链路不应默认调用这里的全量重建逻辑。
 """
 import numpy as np
 import faiss

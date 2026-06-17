@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  adminKnowledgeImportsUrl,
   buildApiUrl,
   chatJobsUrl,
   chatThreadMessagesUrl,
   chatThreadsUrl,
+  deleteKnowledge,
+  formatShanghaiDateTime,
   graphUrl,
+  importKnowledge,
   parseQueuedMessages,
   postChatStream,
   processUrl,
@@ -57,6 +61,52 @@ test("chat thread endpoints expose stable backend paths", () => {
 test("admin endpoints expose stable backend paths", () => {
   assert.equal(buildApiUrl("/api/admin/users", { limit: 100 }), "http://localhost:8000/api/admin/users?limit=100");
   assert.equal(buildApiUrl("/api/admin/users/user-1"), "http://localhost:8000/api/admin/users/user-1");
+  assert.equal(buildApiUrl("/api/admin/knowledge/extract"), "http://localhost:8000/api/admin/knowledge/extract");
+  assert.equal(buildApiUrl("/api/admin/knowledge/import"), "http://localhost:8000/api/admin/knowledge/import");
+  assert.equal(buildApiUrl("/api/admin/knowledge/delete"), "http://localhost:8000/api/admin/knowledge/delete");
+  assert.equal(adminKnowledgeImportsUrl(), "http://localhost:8000/api/admin/knowledge/imports");
+});
+
+test("knowledge operation timestamps render in Shanghai time", () => {
+  assert.equal(formatShanghaiDateTime("2026-06-16 12:28:53.077344"), "2026-06-16 20:28:53");
+  assert.equal(formatShanghaiDateTime("2026-06-16T12:28:53.077344+00:00"), "2026-06-16 20:28:53");
+});
+
+test("deleteKnowledge sends a simple formula name payload", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestUrl = "";
+  let requestBody = "";
+  globalThis.fetch = async (url, options) => {
+    requestUrl = url;
+    requestBody = options.body;
+    return new Response(JSON.stringify({ status: "ok" }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    await deleteKnowledge("token", "阿胶");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(requestUrl, "http://localhost:8000/api/admin/knowledge/delete");
+  assert.deepEqual(JSON.parse(requestBody), { name: "阿胶" });
+});
+
+test("importKnowledge preserves backend error message", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ detail: "药材名称不能为空" }),
+    { status: 400, headers: { "Content-Type": "application/json" } }
+  );
+
+  try {
+    await assert.rejects(
+      () => importKnowledge("token", "", { herb: { name: "" }, relations: [] }),
+      /药材名称不能为空/
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("streaming chat helpers target process endpoint and parse queued messages", () => {

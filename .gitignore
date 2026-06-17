@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+# GitHub 发布保留示例配置，真实环境变量始终走本地或部署平台。
 .venv/
 .venv-training/
 __pycache__/

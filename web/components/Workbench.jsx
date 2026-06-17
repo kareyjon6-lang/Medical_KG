@@ -7,8 +7,11 @@ import {
   Activity,
   Brain,
   ChevronRight,
+  CheckCircle2,
   Clock,
   Database,
+  Eye,
+  EyeOff,
   Filter,
   History,
   Layers3,
@@ -19,7 +22,9 @@ import {
   Search,
   Send,
   ShieldCheck,
+  Sparkles,
   Trash2,
+  UploadCloud,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -33,13 +38,18 @@ import {
   createChatThread,
   deleteAdminUser,
   deleteChatThread,
+  deleteKnowledge,
+  extractKnowledge,
   fetchAdminUsers,
   fetchChatJob,
   fetchChatThreads,
+  fetchKnowledgeImports,
   fetchKnowledgeGraph,
   fetchMe,
   fetchSearchResults,
+  formatShanghaiDateTime,
   fetchThreadMessages,
+  importKnowledge,
   login,
   logout,
   postChatStream,
@@ -53,6 +63,71 @@ const defaultMessages = [
     content: "你好，我可以结合中医知识图谱回答方剂、药材、功效、主治和禁忌相关问题。",
   },
 ];
+
+const emptyKnowledgeDraft = {
+  herb: {
+    name: "",
+    label: "Formula",
+    source: "",
+    ingredients: "",
+    origin: "",
+    property_flavor: "",
+    effect: "",
+    indication: "",
+    meridian: "",
+    dosage: "",
+    usage: "",
+    taboo: "",
+    note: "",
+  },
+  relations: [],
+};
+
+function cloneKnowledgeDraft(draft = emptyKnowledgeDraft) {
+  return {
+    herb: { ...emptyKnowledgeDraft.herb, ...(draft.herb || {}) },
+    relations: Array.isArray(draft.relations) ? draft.relations.map((relation) => ({ ...relation })) : [],
+  };
+}
+
+const knowledgeRuntimeStore = {
+  busy: false,
+  deleteName: "",
+  draft: cloneKnowledgeDraft(),
+  file: null,
+  jobId: "",
+  previewGraph: { nodes: [], edges: [] },
+  status: "等待录入药材资料",
+  text: "",
+};
+
+function snapshotKnowledgeRuntime() {
+  return {
+    busy: knowledgeRuntimeStore.busy,
+    deleteName: knowledgeRuntimeStore.deleteName,
+    draft: cloneKnowledgeDraft(knowledgeRuntimeStore.draft),
+    file: knowledgeRuntimeStore.file,
+    jobId: knowledgeRuntimeStore.jobId,
+    previewGraph: {
+      nodes: [...(knowledgeRuntimeStore.previewGraph.nodes || [])],
+      edges: [...(knowledgeRuntimeStore.previewGraph.edges || [])],
+    },
+    status: knowledgeRuntimeStore.status,
+    text: knowledgeRuntimeStore.text,
+  };
+}
+
+function patchKnowledgeRuntime(patch) {
+  Object.assign(knowledgeRuntimeStore, patch);
+}
+
+const relationTypeLabels = {
+  HAS_INGREDIENT: "组成",
+  HAS_EFFECT: "功效",
+  TREATS_DISEASE: "治疗疾病",
+  ALLEVIATES_SYMPTOM: "缓解症状",
+  FROM_SOURCE: "出处",
+};
 
 const demoGraph = {
   nodes: [
@@ -102,6 +177,7 @@ const authRuntime = {
 
 const anonymousRuntimeKey = "anonymous";
 const chatRuntimeStore = new Map();
+const chatStreamErrorMessage = "回答生成中断，请稍后重试。";
 
 function cloneDefaultMessages() {
   return defaultMessages.map((message) => ({ ...message }));
@@ -111,6 +187,7 @@ function createThreadRuntimeState(messages = cloneDefaultMessages(), loaded = fa
   return {
     abortController: null,
     activeStreamToken: null,
+    draft: "",
     jobId: "",
     loaded,
     loading: false,
@@ -127,6 +204,7 @@ function createChatRuntime() {
   return {
     activeThreadId: "",
     activeView: "assistant",
+    pendingDraft: "",
     subscribers: new Set(),
     threads: {},
   };
@@ -152,6 +230,7 @@ function snapshotChatRuntime(runtime) {
     activeThreadId: runtime.activeThreadId,
     loading: visibleState.loading,
     messages: visibleState.messages,
+    prompt: activeState ? (visibleState.draft || "") : (runtime.pendingDraft || ""),
     progress: visibleState.progress,
     threadStates: { ...runtime.threads },
     thoughts: visibleState.thoughts,
@@ -187,6 +266,7 @@ function resetChatRuntime(runtime) {
   Object.values(runtime.threads).forEach((state) => state.abortController?.abort());
   patchChatRuntime(runtime, {
     activeThreadId: "",
+    pendingDraft: "",
     threads: {},
   });
 }
@@ -223,6 +303,7 @@ export default function Workbench({ initialView = "assistant" }) {
   const shellRef = useRef(null);
   const runtimeRef = useRef(getChatRuntime(getRuntimeKey({ token: authRuntime.token, user: authRuntime.user })));
   const runtimeSnapshot = snapshotChatRuntime(runtimeRef.current);
+  const knowledgeRuntimeSnapshot = snapshotKnowledgeRuntime();
   const [auth, setAuth] = useState(() => ({ token: authRuntime.token, user: authRuntime.user }));
   const runtimeKey = useMemo(() => getRuntimeKey(auth), [auth.token, auth.user?.id, auth.user?.role, auth.user?.username]);
   const [savedSession, setSavedSession] = useState(null);
@@ -231,7 +312,7 @@ export default function Workbench({ initialView = "assistant" }) {
   const [activeView, setActiveView] = useState(initialView);
   const [status, setStatus] = useState(() => (authRuntime.token ? "登录成功" : "等待登录"));
   const [messages, setMessages] = useState(runtimeSnapshot.messages);
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(runtimeSnapshot.prompt);
   const [thoughts, setThoughts] = useState(runtimeSnapshot.thoughts);
   const [thinkingProgress, setThinkingProgress] = useState(runtimeSnapshot.progress);
   const [chatLoading, setChatLoading] = useState(runtimeSnapshot.loading);
@@ -257,6 +338,16 @@ export default function Workbench({ initialView = "assistant" }) {
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminForm, setAdminForm] = useState({ username: "", password: "", role: "user" });
   const [adminStatus, setAdminStatus] = useState("等待管理员登录");
+  const [adminTab, setAdminTab] = useState("knowledge");
+  const [knowledgeText, setKnowledgeText] = useState(knowledgeRuntimeSnapshot.text);
+  const [knowledgeFile, setKnowledgeFile] = useState(knowledgeRuntimeSnapshot.file);
+  const [knowledgeDraft, setKnowledgeDraft] = useState(knowledgeRuntimeSnapshot.draft);
+  const [knowledgeJobId, setKnowledgeJobId] = useState(knowledgeRuntimeSnapshot.jobId);
+  const [knowledgeDeleteName, setKnowledgeDeleteName] = useState(knowledgeRuntimeSnapshot.deleteName);
+  const [knowledgePreviewGraph, setKnowledgePreviewGraph] = useState(knowledgeRuntimeSnapshot.previewGraph);
+  const [knowledgeImports, setKnowledgeImports] = useState([]);
+  const [knowledgeStatus, setKnowledgeStatus] = useState(knowledgeRuntimeSnapshot.status);
+  const [knowledgeBusy, setKnowledgeBusy] = useState(knowledgeRuntimeSnapshot.busy);
 
   useEffect(() => {
     const token = window.localStorage.getItem("tcm_kg_token");
@@ -342,6 +433,7 @@ export default function Workbench({ initialView = "assistant" }) {
     runtimeRef.current = runtime;
     return subscribeChatRuntime(runtime, (snapshot) => {
       setMessages(snapshot.messages);
+      setPrompt(snapshot.prompt);
       setThoughts(snapshot.thoughts);
       setThinkingProgress(snapshot.progress);
       setChatLoading(snapshot.loading);
@@ -372,7 +464,21 @@ export default function Workbench({ initialView = "assistant" }) {
   useEffect(() => {
     if (!auth.token || auth.user?.role !== "admin") return;
     refreshAdminUsers();
+    refreshKnowledgeImports();
   }, [auth.token, auth.user?.role]);
+
+  useEffect(() => {
+    patchKnowledgeRuntime({
+      busy: knowledgeBusy,
+      deleteName: knowledgeDeleteName,
+      draft: knowledgeDraft,
+      file: knowledgeFile,
+      jobId: knowledgeJobId,
+      previewGraph: knowledgePreviewGraph,
+      status: knowledgeStatus,
+      text: knowledgeText,
+    });
+  }, [knowledgeBusy, knowledgeDeleteName, knowledgeDraft, knowledgeFile, knowledgeJobId, knowledgePreviewGraph, knowledgeStatus, knowledgeText]);
 
   useEffect(() => {
     if (!auth.token || activeView !== "admin" || auth.user?.role === "admin") return;
@@ -451,6 +557,28 @@ export default function Workbench({ initialView = "assistant" }) {
     }
   }
 
+  async function refreshKnowledgeImports() {
+    if (!auth.token || auth.user?.role !== "admin") return;
+    try {
+      const data = await fetchKnowledgeImports(auth.token, 80);
+      setKnowledgeImports(data.items || []);
+    } catch (error) {
+      setKnowledgeStatus("操作记录读取失败");
+    }
+  }
+
+  function applyKnowledgeState(patch) {
+    patchKnowledgeRuntime(patch);
+    if (Object.prototype.hasOwnProperty.call(patch, "text")) setKnowledgeText(patch.text);
+    if (Object.prototype.hasOwnProperty.call(patch, "file")) setKnowledgeFile(patch.file);
+    if (Object.prototype.hasOwnProperty.call(patch, "draft")) setKnowledgeDraft(cloneKnowledgeDraft(patch.draft));
+    if (Object.prototype.hasOwnProperty.call(patch, "jobId")) setKnowledgeJobId(patch.jobId);
+    if (Object.prototype.hasOwnProperty.call(patch, "deleteName")) setKnowledgeDeleteName(patch.deleteName);
+    if (Object.prototype.hasOwnProperty.call(patch, "previewGraph")) setKnowledgePreviewGraph(patch.previewGraph);
+    if (Object.prototype.hasOwnProperty.call(patch, "status")) setKnowledgeStatus(patch.status);
+    if (Object.prototype.hasOwnProperty.call(patch, "busy")) setKnowledgeBusy(patch.busy);
+  }
+
   async function handleAuthed(data) {
     window.localStorage.setItem("tcm_kg_token", data.token);
     window.sessionStorage.setItem("tcm_kg_session_confirmed", "1");
@@ -460,13 +588,9 @@ export default function Workbench({ initialView = "assistant" }) {
     setSavedSession(null);
     setStatus("登录成功");
     await refreshUserContext(data.token);
-    if (data.user?.role === "admin") {
-      setActiveView("admin");
-      router.push("/admin");
-    } else if (activeView === "admin") {
-      setActiveView("assistant");
-      router.push("/assistant");
-    }
+    const nextView = data.user?.role === "admin" ? "admin" : "assistant";
+    setActiveView(nextView);
+    router.push(nextView === "admin" ? "/admin" : "/assistant");
   }
 
   async function handleContinueSession(session) {
@@ -496,6 +620,99 @@ export default function Workbench({ initialView = "assistant" }) {
       setAdminStatus("用户已删除");
     } catch (error) {
       setAdminStatus("删除失败：不能删除当前管理员或最后一个管理员");
+    }
+  }
+
+  async function handleExtractKnowledge(event) {
+    event.preventDefault();
+    if (!knowledgeText.trim() && !knowledgeFile) {
+      applyKnowledgeState({ status: "请先输入文本或上传文档" });
+      return;
+    }
+    applyKnowledgeState({ busy: true, status: "AI 正在识别方药知识并生成图谱预览" });
+    try {
+      const data = await extractKnowledge(auth.token, { text: knowledgeText, file: knowledgeFile });
+      const nextDraft = normalizeKnowledgeDraft(data.extracted);
+      applyKnowledgeState({
+        draft: nextDraft,
+        jobId: "",
+        previewGraph: data.preview_graph?.nodes?.length ? data.preview_graph : buildPreviewGraphFromDraft(data.extracted),
+        status: "识别完成，右侧已生成图谱预览；确认后才会正式入库并生成记录",
+      });
+    } catch (error) {
+      applyKnowledgeState({ previewGraph: { nodes: [], edges: [] }, status: "识别失败：" + (error?.message || "请检查资料格式") });
+    } finally {
+      applyKnowledgeState({ busy: false });
+    }
+  }
+
+  async function handleImportKnowledge() {
+    if (!knowledgeDraft.herb.name.trim()) {
+      applyKnowledgeState({ status: "请先填写药材名称" });
+      return;
+    }
+    applyKnowledgeState({ busy: true, status: "正在写入 Neo4j 知识图谱，并增量更新实体索引" });
+    try {
+      const data = await importKnowledge(auth.token, knowledgeJobId, knowledgeDraft);
+      const entityName = data.job?.entity_name || knowledgeDraft.herb.name;
+      if (data.job) {
+        setKnowledgeImports((items) => [data.job, ...items.filter((item) => item.id !== data.job.id)]);
+      }
+      applyKnowledgeState({
+        file: null,
+        jobId: "",
+        status: `已确认导入：${entityName}，正式记录已生成；实体索引已增量更新`,
+        text: "",
+      });
+      await loadKnowledgePreviewGraph(entityName);
+      await refreshKnowledgeImports();
+    } catch (error) {
+      applyKnowledgeState({ status: "导入失败：" + (error?.message || "请检查 Neo4j 或抽取字段") });
+    } finally {
+      applyKnowledgeState({ busy: false });
+    }
+  }
+
+  async function handleDeleteKnowledge() {
+    const cleanName = knowledgeDeleteName.trim();
+    if (!cleanName) {
+      applyKnowledgeState({ status: "请输入要删除的方药名称" });
+      return;
+    }
+    applyKnowledgeState({ busy: true, status: "正在从 Neo4j 知识图谱删除方药，并同步屏蔽实体索引映射" });
+    try {
+      const deletedData = await deleteKnowledge(auth.token, cleanName);
+      if (deletedData.job) {
+        setKnowledgeImports((items) => [deletedData.job, ...items.filter((item) => item.id !== deletedData.job.id)]);
+      }
+      applyKnowledgeState({
+        deleteName: "",
+        draft: cloneKnowledgeDraft(),
+        previewGraph: { nodes: [], edges: [] },
+        status: `已删除方药：${cleanName}，正式删除记录已生成；实体索引映射已同步屏蔽`,
+      });
+      await refreshKnowledgeImports();
+      if (graphFocus === cleanName) {
+        setGraph({ nodes: [], edges: [] });
+      }
+    } catch (error) {
+      applyKnowledgeState({ status: "删除失败：" + (error?.message || "未找到该方药") });
+    } finally {
+      applyKnowledgeState({ busy: false });
+    }
+  }
+
+  async function loadKnowledgePreviewGraph(entityName) {
+    const cleanName = String(entityName || "").trim();
+    if (!cleanName) {
+      applyKnowledgeState({ previewGraph: { nodes: [], edges: [] } });
+      return;
+    }
+    try {
+      const nextGraph = await fetchKnowledgeGraph(cleanName, { depth: 2, limit: 80 });
+      applyKnowledgeState({ previewGraph: nextGraph.nodes?.length ? nextGraph : buildPreviewGraphFromDraft(knowledgeDraft) });
+    } catch (error) {
+      applyKnowledgeState({ previewGraph: buildPreviewGraphFromDraft(knowledgeDraft) });
     }
   }
 
@@ -560,6 +777,7 @@ export default function Workbench({ initialView = "assistant" }) {
       setActiveThreadId(thread.id);
       const runtime = runtimeRef.current;
       runtime.activeThreadId = thread.id;
+      runtime.pendingDraft = "";
       runtime.threads[thread.id] = createThreadRuntimeState(cloneDefaultMessages(), true);
       notifyChatRuntime(runtime);
       setStatus("已创建新对话");
@@ -579,6 +797,7 @@ export default function Workbench({ initialView = "assistant" }) {
       patchThreadRuntime(runtime, activeThreadId, {
         abortController: null,
         activeStreamToken: null,
+        draft: "",
         jobId: "",
         loaded: true,
         loading: false,
@@ -637,9 +856,22 @@ export default function Workbench({ initialView = "assistant" }) {
     setThreads((items) => [thread, ...items]);
     setActiveThreadId(thread.id);
     runtime.activeThreadId = thread.id;
+    runtime.pendingDraft = "";
     runtime.threads[thread.id] = createThreadRuntimeState(cloneDefaultMessages(), true);
     notifyChatRuntime(runtime);
     return thread.id;
+  }
+
+  function handlePromptChange(value) {
+    setPrompt(value);
+    const runtime = runtimeRef.current;
+    const threadId = runtime.activeThreadId;
+    if (threadId) {
+      patchThreadRuntime(runtime, threadId, { draft: value });
+    } else {
+      runtime.pendingDraft = value;
+      notifyChatRuntime(runtime);
+    }
   }
 
   async function handleChat(event) {
@@ -649,7 +881,6 @@ export default function Workbench({ initialView = "assistant" }) {
     const requestToken = auth.token;
     if (!text) return;
 
-    setPrompt("");
     let activeStreamThreadId = "";
 
     try {
@@ -686,6 +917,7 @@ export default function Workbench({ initialView = "assistant" }) {
       patchThreadRuntime(runtime, threadId, {
         abortController,
         activeStreamToken: streamToken,
+        draft: "",
         jobId: "",
         loaded: true,
         loading: true,
@@ -696,6 +928,7 @@ export default function Workbench({ initialView = "assistant" }) {
         thoughts: streamThoughts,
         unread: false,
       });
+      setPrompt("");
       setStatus("模型正在流式回答");
 
       await postChatStream(
@@ -744,6 +977,20 @@ export default function Workbench({ initialView = "assistant" }) {
               unread: !streamIsVisible() || runtime.activeView !== "assistant",
             });
           }
+          if (eventMessage.type === "error") {
+            streamProgress = clampProgress(eventMessage.progress, 100);
+            streamMessages = appendAssistantError(streamMessages, eventMessage.msg || chatStreamErrorMessage);
+            patchThreadRuntime(runtime, threadId, {
+              abortController: null,
+              activeStreamToken: null,
+              jobId: nextJobId,
+              loading: false,
+              messages: streamMessages,
+              progress: streamProgress,
+              status: "failed",
+              unread: !streamIsVisible() || runtime.activeView !== "assistant",
+            });
+          }
         },
         { threadId, signal: abortController.signal, useJobEndpoint: true },
       );
@@ -769,19 +1016,19 @@ export default function Workbench({ initialView = "assistant" }) {
       if (!state) return;
       let errorText = error?.message?.includes("后端问答任务接口不存在")
         ? "后端仍在运行旧版本，请重启 FastAPI 后端后再试。"
-        : "服务暂时不可用，请稍后再试。";
+        : chatStreamErrorMessage;
       const failedJobId = state.jobId;
       if (failedJobId) {
         try {
           const data = await fetchChatJob(auth.token, failedJobId);
           if (data?.job?.error) {
-            errorText = `问答任务失败：${data.job.error}`;
+            errorText = chatStreamErrorMessage;
           }
         } catch (jobError) {
           // Keep the local connection error when the job status cannot be loaded.
         }
       }
-      const streamMessages = appendToLastAssistant(state.messages, errorText);
+      const streamMessages = appendAssistantError(state.messages, errorText);
       patchThreadRuntime(runtime, threadId, {
         abortController: null,
         activeStreamToken: null,
@@ -1021,7 +1268,7 @@ export default function Workbench({ initialView = "assistant" }) {
           <AssistantPanel
             messages={messages}
             prompt={prompt}
-            setPrompt={setPrompt}
+            setPrompt={handlePromptChange}
             onSubmit={handleChat}
             loading={chatLoading}
             thoughts={thoughts}
@@ -1086,6 +1333,24 @@ export default function Workbench({ initialView = "assistant" }) {
             onCreate={handleCreateAdminUser}
             onDelete={handleDeleteAdminUser}
             onRefresh={refreshAdminUsers}
+            activeTab={adminTab}
+            setActiveTab={setAdminTab}
+            knowledgeText={knowledgeText}
+            setKnowledgeText={setKnowledgeText}
+            knowledgeFile={knowledgeFile}
+            setKnowledgeFile={setKnowledgeFile}
+            knowledgeDraft={knowledgeDraft}
+            knowledgePreviewGraph={knowledgePreviewGraph}
+            knowledgeStatus={knowledgeStatus}
+            knowledgeBusy={knowledgeBusy}
+            hasWebGL={hasWebGL}
+            deleteName={knowledgeDeleteName}
+            setDeleteName={setKnowledgeDeleteName}
+            knowledgeImports={knowledgeImports}
+            onExtractKnowledge={handleExtractKnowledge}
+            onImportKnowledge={handleImportKnowledge}
+            onDeleteKnowledge={handleDeleteKnowledge}
+            onRefreshKnowledgeImports={refreshKnowledgeImports}
           />
         )}
       </section>
@@ -1098,7 +1363,7 @@ function Sidebar({ activeView, query, user, assistantHasUnread, onLogout, onNavi
     { id: "assistant", label: "问答", icon: MessageCircle, href: "/assistant" },
     { id: "search", label: "搜索", icon: Search, href: "/search" },
     { id: "graph", label: "图谱", icon: Network, href: "/graph" },
-    ...(user?.role === "admin" ? [{ id: "admin", label: "用户", icon: Users, href: "/admin" }] : []),
+    ...(user?.role === "admin" ? [{ id: "admin", label: "后台", icon: ShieldCheck, href: "/admin" }] : []),
   ];
   return <aside className="sidebar"><div className="brand"><span className="brand-mark"><b>{"药图"}</b></span><strong>{"中医知识图谱"}</strong><span>{user?.username || "未知用户"}</span></div><nav className="tabs" aria-label="主导航">{tabs.map((tab) => { const Icon = tab.icon; const href = tab.id === "graph" && query.trim() ? tab.href + "?q=" + encodeURIComponent(query.trim()) : tab.href; return <Link key={tab.id} className={["tab", activeView === tab.id ? "active" : "", tab.id === "assistant" && assistantHasUnread ? "has-unread" : ""].filter(Boolean).join(" ")} href={href} onClick={() => onNavigate(tab.id)} title={tab.label}><Icon size={18} /><span>{tab.label}</span></Link>; })}</nav><button className="logout-button" type="button" onClick={onLogout} title="退出登录"><LogOut size={17} /><span>{"退出"}</span></button></aside>;
 }
@@ -1533,17 +1798,19 @@ function roundRect(ctx, x, y, width, height, radius) {
 }
 
 function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
-  const [showLogin, setShowLogin] = useState(() => Boolean(savedSession));
+  const [showLogin, setShowLogin] = useState(false);
   const [loginKind, setLoginKind] = useState("user");
   const [mode, setMode] = useState("login");
   const [username, setUsername] = useState("demo");
   const [password, setPassword] = useState("demo123");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const landingRef = useRef(null);
   const loginRef = useRef(null);
   const [focusedField, setFocusedField] = useState("");
   const isAdmin = loginKind === "admin";
+  const authMode = isAdmin ? "admin" : mode === "register" ? "register" : "login";
 
   useEffect(() => {
     if (savedSession) {
@@ -1555,6 +1822,21 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
     if (isAdmin) { setMode("login"); setUsername("admin"); setPassword("admin123"); }
     else { setUsername("demo"); setPassword("demo123"); }
   }, [isAdmin]);
+
+  function chooseAuthMode(nextMode) {
+    setError("");
+    if (nextMode === "admin") {
+      setLoginKind("admin");
+      setMode("login");
+      setUsername("admin");
+      setPassword("admin123");
+      return;
+    }
+    setLoginKind("user");
+    setMode(nextMode === "register" ? "register" : "login");
+    setUsername("demo");
+    setPassword("demo123");
+  }
 
   async function submit(event) {
     event.preventDefault(); setLoading(true); setError("");
@@ -1633,7 +1915,7 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
   }
 
   return (
-    <main className={["login-shell", "login-shell-v2", focusedField ? "is-typing" : "", password ? "has-password" : ""].filter(Boolean).join(" ")} ref={loginRef} onPointerMove={handleLoginPointerMove} onPointerLeave={resetLoginPointer}>
+    <main className={["login-shell", "login-shell-v2", focusedField ? "is-typing" : "", password ? "has-password" : "", passwordVisible ? "password-visible" : "password-hidden"].filter(Boolean).join(" ")} ref={loginRef} onPointerMove={handleLoginPointerMove} onPointerLeave={resetLoginPointer}>
       <div className="login-image-bg" />
       <div className="paper-wash" />
       <section className="login-creature-stage" aria-hidden="true">
@@ -1655,27 +1937,245 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
       </section>
       <section className="login-panel login-panel-v2">
         <h1>{isAdmin ? "登录管理员" : mode === "register" ? "注册用户" : "登录用户"}</h1>
-        <div className="login-kind-switch" role="tablist" aria-label="登录类型">
-          <button type="button" className={loginKind === "user" ? "active" : ""} onClick={() => setLoginKind("user")}>{"用户登录"}</button>
-          <button type="button" className={loginKind === "admin" ? "active" : ""} onClick={() => setLoginKind("admin")}>{"管理员登录"}</button>
+        <div className="login-kind-switch login-entry-switch" role="tablist" aria-label="登录与注册入口">
+          <button type="button" className={authMode === "login" ? "active" : ""} onClick={() => chooseAuthMode("login")}>{"登录用户"}</button>
+          <button type="button" className={authMode === "register" ? "active" : ""} onClick={() => chooseAuthMode("register")}>{"注册用户"}</button>
+          <button type="button" className={authMode === "admin" ? "active" : ""} onClick={() => chooseAuthMode("admin")}>{"管理员登录"}</button>
         </div>
         {savedSession && <div className="session-card"><span>{"已检测到上次会话："}{savedSession.user?.username}</span><button type="button" onClick={() => onContinue(savedSession)}>{"继续进入"}</button></div>}
         <form onSubmit={submit} className="login-form">
           <label><span>{isAdmin ? "管理员账号" : "用户名"}</span><input value={username} onFocus={() => setFocusedField("username")} onBlur={() => setFocusedField("")} onChange={(event) => setUsername(event.target.value)} autoComplete="username" /></label>
-          <label><span>{"密码"}</span><input value={password} onFocus={() => setFocusedField("password")} onBlur={() => setFocusedField("")} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>
+          <label><span>{"密码"}</span><div className="password-field"><input value={password} onFocus={() => setFocusedField("password")} onBlur={() => setFocusedField("")} onChange={(event) => setPassword(event.target.value)} type={passwordVisible ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} /><button type="button" className={passwordVisible ? "visible" : ""} onClick={() => setPasswordVisible((visible) => !visible)} title={passwordVisible ? "隐藏密码" : "显示密码"}>{passwordVisible ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
           {error && <div className="auth-error">{error}</div>}
           <button type="submit" disabled={loading}>{loading ? "处理中" : isAdmin ? "进入管理后台" : mode === "login" ? "登录" : "创建账号"}</button>
         </form>
-        {!isAdmin && <button className="mode-switch" type="button" onClick={() => setMode(mode === "login" ? "register" : "login")}>{mode === "login" ? "没有账号？创建一个" : "已有账号？返回登录"}</button>}
       </section>
     </main>
   );
 }
 
-function AdminPanel({ users, currentUser, form, setForm, status, onCreate, onDelete, onRefresh }) {
+function AdminPanel({
+  users,
+  currentUser,
+  form,
+  setForm,
+  status,
+  onCreate,
+  onDelete,
+  onRefresh,
+  activeTab,
+  setActiveTab,
+  knowledgeText,
+  setKnowledgeText,
+  knowledgeFile,
+  setKnowledgeFile,
+  knowledgeDraft,
+  knowledgePreviewGraph,
+  knowledgeStatus,
+  knowledgeBusy,
+  hasWebGL,
+  deleteName,
+  setDeleteName,
+  knowledgeImports,
+  onExtractKnowledge,
+  onImportKnowledge,
+  onDeleteKnowledge,
+  onRefreshKnowledgeImports,
+}) {
   const userCount = users.filter((user) => user.role !== "admin").length;
   const adminCount = users.filter((user) => user.role === "admin").length;
-  return <div className="admin-layout"><section className="admin-hero"><div><p className="eyebrow">{"管理员"}</p><h2>{"用户管理"}</h2><p>{"创建、删除平台账号，维护普通用户与管理员权限。"}</p></div><div className="admin-stats"><span><Users size={16} />{userCount} {"用户"}</span><span><ShieldCheck size={16} />{adminCount} {"管理员"}</span></div></section><section className="admin-create"><div className="panel-heading"><div><p className="eyebrow">{"创建账号"}</p><h2>{"新增用户"}</h2></div><UserPlus size={22} /></div><form className="admin-form" onSubmit={onCreate}><label><span>{"用户名"}</span><input value={form.username} onChange={(event) => setForm((item) => ({ ...item, username: event.target.value }))} /></label><label><span>{"初始密码"}</span><input type="password" value={form.password} onChange={(event) => setForm((item) => ({ ...item, password: event.target.value }))} /></label><label><span>{"角色"}</span><select value={form.role} onChange={(event) => setForm((item) => ({ ...item, role: event.target.value }))}><option value="user">{"普通用户"}</option><option value="admin">{"管理员"}</option></select></label><button type="submit">{"创建账号"}</button></form><p className="admin-status">{status}</p></section><section className="admin-users"><div className="panel-heading"><div><p className="eyebrow">{"账号列表"}</p><h2>{"用户列表"}</h2></div><button type="button" className="mode-switch compact" onClick={onRefresh}>{"刷新"}</button></div><div className="user-table">{users.map((user) => <article key={user.id} className="user-row"><div><strong>{user.username}</strong><span>{user.role === "admin" ? "管理员" : "普通用户"} {" · "}{user.message_count || 0}{" 条消息"}</span></div><small>{user.last_login_at ? "最近登录 " + user.last_login_at : "尚未登录"}</small><button type="button" disabled={user.id === currentUser?.id} onClick={() => onDelete(user.id)}>{"删除"}</button></article>)}{!users.length && <p className="empty-note">{"暂无用户记录"}</p>}</div></section></div>;
+  const tabs = [
+    { id: "knowledge", label: "知识入库", icon: Database },
+    { id: "users", label: "用户管理", icon: Users },
+    { id: "imports", label: "操作记录", icon: History },
+  ];
+  return (
+    <div className="admin-layout admin-scroll-layout">
+      <section className="admin-hero admin-knowledge-hero">
+        <div>
+          <p className="eyebrow">{"管理员后台"}</p>
+          <h2>{activeTab === "users" ? "用户管理" : activeTab === "imports" ? "操作记录" : "知识入库"}</h2>
+          <p>{"识别、确认导入或删除方药知识，并用正式记录追踪每一次图谱变更。"}</p>
+        </div>
+        <div className="admin-stats">
+          <span><Database size={16} />{"图谱入库"}</span>
+          <span><Users size={16} />{userCount} {"用户"}</span>
+          <span><ShieldCheck size={16} />{adminCount} {"管理员"}</span>
+        </div>
+      </section>
+      <nav className="admin-tabs" aria-label="管理员后台页签">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          return <button key={tab.id} type="button" className={activeTab === tab.id ? "active" : ""} onClick={() => setActiveTab(tab.id)}><Icon size={16} />{tab.label}</button>;
+        })}
+      </nav>
+      {activeTab === "users" && (
+        <div className="admin-users-workspace">
+          <section className="admin-create"><div className="panel-heading"><div><p className="eyebrow">{"创建账号"}</p><h2>{"新增用户"}</h2></div><UserPlus size={22} /></div><form className="admin-form" onSubmit={onCreate}><label><span>{"用户名"}</span><input value={form.username} onChange={(event) => setForm((item) => ({ ...item, username: event.target.value }))} /></label><label><span>{"初始密码"}</span><input type="password" value={form.password} onChange={(event) => setForm((item) => ({ ...item, password: event.target.value }))} /></label><label><span>{"角色"}</span><select value={form.role} onChange={(event) => setForm((item) => ({ ...item, role: event.target.value }))}><option value="user">{"普通用户"}</option><option value="admin">{"管理员"}</option></select></label><button type="submit">{"创建账号"}</button></form><p className="admin-status">{status}</p></section>
+          <section className="admin-users"><div className="panel-heading"><div><p className="eyebrow">{"账号列表"}</p><h2>{"用户列表"}</h2></div><button type="button" className="mode-switch compact" onClick={onRefresh}>{"刷新"}</button></div><div className="user-table">{users.map((user) => <article key={user.id} className="user-row"><div><strong>{user.username}</strong><span>{user.role === "admin" ? "管理员" : "普通用户"} {" · "}{user.message_count || 0}{" 条消息"}</span></div><small>{user.last_login_at ? "最近登录 " + user.last_login_at : "尚未登录"}</small><button type="button" disabled={user.id === currentUser?.id} onClick={() => onDelete(user.id)}>{"删除"}</button></article>)}{!users.length && <p className="empty-note">{"暂无用户记录"}</p>}</div></section>
+        </div>
+      )}
+      {activeTab === "knowledge" && (
+        <KnowledgeImportPanel
+          text={knowledgeText}
+          setText={setKnowledgeText}
+          file={knowledgeFile}
+          setFile={setKnowledgeFile}
+          draft={knowledgeDraft}
+          previewGraph={knowledgePreviewGraph}
+          status={knowledgeStatus}
+          busy={knowledgeBusy}
+          hasWebGL={hasWebGL}
+          deleteName={deleteName}
+          setDeleteName={setDeleteName}
+          onExtract={onExtractKnowledge}
+          onImport={onImportKnowledge}
+          onDelete={onDeleteKnowledge}
+        />
+      )}
+      {activeTab === "imports" && (
+        <KnowledgeImportHistory imports={knowledgeImports} onRefresh={onRefreshKnowledgeImports} />
+      )}
+    </div>
+  );
+}
+
+function KnowledgeImportPanel({ text, setText, file, setFile, draft, previewGraph, status, busy, hasWebGL, deleteName, setDeleteName, onExtract, onImport, onDelete }) {
+  const entityName = draft.herb.name.trim();
+  return (
+    <form className="knowledge-import-workbench" onSubmit={onExtract}>
+      <div className="knowledge-workbench-head">
+        <div>
+          <p className="eyebrow">{"知识入库"}</p>
+          <h2>{"识别并导入方药"}</h2>
+        </div>
+        <Sparkles size={24} />
+      </div>
+      <div className="knowledge-journey"><span>{"输入"}</span><span>{"AI识别"}</span><span>{"图谱预览"}</span><span>{"确认入库"}</span></div>
+      <div className="knowledge-unified-grid">
+        <section className="knowledge-source-zone">
+          <div className="knowledge-zone-title">
+            <div><p className="eyebrow">{"输入"}</p><h3>{"资料来源"}</h3></div>
+            <button type="submit" disabled={busy}>{busy ? "识别中" : "AI识别"}</button>
+          </div>
+          <label className="knowledge-textarea">
+            <span>{"手动输入"}</span>
+            <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="粘贴方剂或药材资料，例如方剂名称、出处、组成、功用、主治、用法等" />
+          </label>
+          <label className="knowledge-upload">
+            <UploadCloud size={22} />
+            <strong>{file?.name || "上传文档"}</strong>
+            <span>{"TXT / MD / PDF / DOCX，20MB 内"}</span>
+            <input type="file" accept=".txt,.txtx,.md,.pdf,.docx" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+          </label>
+          <div className="knowledge-delete-tool">
+            <span>{"删除方药"}</span>
+            <input
+              value={deleteName}
+              onChange={(event) => setDeleteName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  if (!busy && deleteName.trim()) onDelete();
+                }
+              }}
+              placeholder="输入方药名称"
+            />
+            <button type="button" className="danger" disabled={busy || !deleteName.trim()} onClick={onDelete}>{"删除"}</button>
+          </div>
+          <small className="knowledge-status">{status}</small>
+          <button type="button" className="knowledge-confirm-button" disabled={busy || !entityName} onClick={onImport}>{"确认导入图谱"}</button>
+        </section>
+        <KnowledgeGraphPreview graph={previewGraph} focus={entityName} draft={draft} hasWebGL={hasWebGL} />
+      </div>
+    </form>
+  );
+}
+
+function KnowledgeImportHistory({ imports, onRefresh }) {
+  return (
+    <section className="knowledge-history-panel">
+      <div className="knowledge-workbench-head">
+        <div><p className="eyebrow">{"记录"}</p><h2>{"图谱操作记录"}</h2></div>
+        <button type="button" className="mode-switch compact" onClick={onRefresh}>{"刷新"}</button>
+      </div>
+      <div className="knowledge-history-list">
+        {imports.map((item) => (
+          <article key={item.id} className={["knowledge-history-row", item.operation_type, item.is_committed || item.status === "committed" ? "committed" : "draft"].join(" ")}>
+            <span className={["operation-badge", item.operation_type].join(" ")}>{item.operation_type === "delete" ? "删除" : "添加"}</span>
+            <strong>{item.entity_name || item.extracted?.herb?.name || "未命名方药"}</strong>
+            <span>{formatShanghaiDateTime(item.finished_at || item.created_at)}</span>
+            <small>{item.is_committed || item.status === "committed" ? "正式生效" : "未生效"}</small>
+          </article>
+        ))}
+        {!imports.length && <p className="empty-note">{"暂无正式图谱操作记录。"}</p>}
+      </div>
+    </section>
+  );
+}
+
+function KnowledgeGraphPreview({ graph, focus, draft, hasWebGL }) {
+  const sceneRef = useRef(null);
+  const [graphSize, setGraphSize] = useState({ width: 1, height: 1 });
+  const [selectedNode, setSelectedNode] = useState(null);
+  const previewData = useMemo(() => toRenderableGraph(graph, focus), [graph, focus]);
+  useEffect(() => {
+    function measureScene() {
+      const rect = sceneRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setGraphSize({ width: Math.max(320, Math.floor(rect.width)), height: Math.max(360, Math.floor(rect.height)) });
+    }
+    measureScene();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measureScene) : null;
+    if (observer && sceneRef.current) observer.observe(sceneRef.current);
+    window.addEventListener("resize", measureScene);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", measureScene); };
+  }, []);
+  const hasGraph = previewData.nodes.length > 0;
+  const title = focus || "等待识别";
+  return (
+    <section className="knowledge-preview-zone">
+      <div className="knowledge-zone-title">
+        <div><p className="eyebrow">{"3D 图谱预览"}</p><h3>{title}</h3></div>
+        <span className="knowledge-preview-count">{hasGraph ? `${previewData.nodes.length} 节点 · ${previewData.links.length} 关系` : "空状态"}</span>
+      </div>
+      <div className="knowledge-preview-scene" ref={sceneRef}>
+        {hasGraph ? (
+          hasWebGL ? (
+            <ThreeKnowledgeGraph graphData={previewData} graphFocus={focus} graphSize={graphSize} onSelect={setSelectedNode} />
+          ) : (
+            <KnowledgeGraphFallback graph={{ nodes: previewData.nodes, edges: previewData.links }} focus={focus} onSelect={setSelectedNode} />
+          )
+        ) : (
+          <div className="knowledge-preview-empty">
+            <Network size={34} />
+            <strong>{"识别后将在这里展示方药图谱"}</strong>
+            <span>{"AI识别只生成预览；点击确认导入图谱后才写入 Neo4j 并生成正式记录。"}</span>
+          </div>
+        )}
+        {hasGraph && (
+          <div className="knowledge-preview-legend" aria-label="图谱图例">
+            <div>
+              <b>{"节点"}</b>
+              {["Formula", "Herb", "Effect", "Symptom", "Disease", "Source"].map((label) => (
+                <span key={label}><i style={{ background: entityColor(label) }} />{entityLabel(label)}</span>
+              ))}
+            </div>
+            <div>
+              <b>{"关系"}</b>
+              {["HAS_INGREDIENT", "HAS_EFFECT", "FROM_SOURCE", "ALLEVIATES_SYMPTOM", "TREATS_DISEASE"].map((label) => (
+                <span key={label}><i className="line-swatch" style={{ background: relationColor(label) }} />{relationLabel(label)}</span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="knowledge-preview-summary">
+        <strong>{selectedNode?.name || draft.herb.name || "尚未识别方药"}</strong>
+        <span>{selectedNode ? entityLabel(selectedNode.label) : draft.herb.ingredients ? `组成：${draft.herb.ingredients}` : "支持方剂文档、药材文本和手动粘贴资料"}</span>
+      </div>
+    </section>
+  );
 }
 
 function LoginScreen({ onAuthed, status }) { return <LoginScreenV2 onAuthed={onAuthed} status={status} />; }
@@ -1694,14 +2194,15 @@ function SearchSkeleton() {
 function KnowledgeGraphFallback({ graph, focus, onSelect }) {
   const layout = placeNodes(graph.nodes, focus);
   if (!graph.nodes.length) return <div className="kg-canvas empty">{"暂无图谱数据"}</div>;
-  return <div className="kg-canvas"><svg viewBox="0 0 720 460" role="img" aria-label="知识图谱">{graph.edges.map((edge) => { const source = layout[edge.source]; const target = layout[edge.target]; if (!source || !target) return null; return <g key={edge.id}><line x1={source.x} y1={source.y} x2={target.x} y2={target.y} /><text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2}>{relationLabel(edge.label)}</text></g>; })}</svg>{graph.nodes.map((node) => { const point = layout[node.id]; if (!point) return null; return <button type="button" className={["kg-node", node.label, node.name === focus ? "focused" : ""].filter(Boolean).join(" ")} key={node.id} style={{ left: String(point.x / 7.2) + "%", top: String(point.y / 4.6) + "%" }} onClick={() => onSelect(node)}><span>{node.name}</span><small>{entityLabel(node.label)}</small></button>; })}</div>;
+  return <div className="kg-canvas"><svg viewBox="0 0 720 460" role="img" aria-label="知识图谱">{graph.edges.map((edge) => { const source = layout[edge.source]; const target = layout[edge.target]; if (!source || !target) return null; return <g key={edge.id}><line x1={source.x} y1={source.y} x2={target.x} y2={target.y} style={{ stroke: relationColor(edge.label) }} /><text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2}>{relationLabel(edge.label)}</text></g>; })}</svg>{graph.nodes.map((node) => { const point = layout[node.id]; if (!point) return null; return <button type="button" className={["kg-node", node.label, node.name === focus ? "focused" : ""].filter(Boolean).join(" ")} key={node.id} style={{ left: String(point.x / 7.2) + "%", top: String(point.y / 4.6) + "%" }} onClick={() => onSelect(node)}><span>{node.name}</span><small>{entityLabel(node.label)}</small></button>; })}</div>;
 }
 
 function FormattedMessage({ content }) {
-  if (!content) return <div className="formatted-answer muted">{"正在等待回答…"}</div>;
+  if (!content) return <div className="formatted-answer compact-answer muted">{"正在等待回答…"}</div>;
   const normalized = content.replace(/\s*###\s*/g, "\n\n### ").replace(/\s+-\s+\*\*/g, "\n- **").replace(/\s+-\s+/g, "\n- ");
   const lines = normalized.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-  return <div className="formatted-answer">{lines.map((line, index) => { if (line.startsWith("### ")) return <h3 key={index}>{cleanMarkdown(line.replace(/^###\s*/, ""))}</h3>; if (/^[-*]\s+/.test(line)) return <p className="answer-list-item" key={index}>{cleanMarkdown(line.replace(/^[-*]\s+/, ""))}</p>; return <p key={index}>{cleanMarkdown(line)}</p>; })}</div>;
+  const compact = lines.length === 1 && cleanMarkdown(lines[0]).length <= 40;
+  return <div className={["formatted-answer", compact ? "compact-answer" : ""].filter(Boolean).join(" ")}>{lines.map((line, index) => { if (line.startsWith("### ")) return <h3 key={index}>{cleanMarkdown(line.replace(/^###\s*/, ""))}</h3>; if (/^[-*]\s+/.test(line)) return <p className="answer-list-item" key={index}>{cleanMarkdown(line.replace(/^[-*]\s+/, ""))}</p>; return <p key={index}>{cleanMarkdown(line)}</p>; })}</div>;
 }
 
 function activeTitle(view) { return { assistant: "智能问答", search: "方药知识搜索", graph: "知识图谱关联", admin: "管理员后台" }[view] || "中医知识图谱"; }
@@ -1712,7 +2213,75 @@ function threadStateLabel(state, messageCount = 0) {
   if (state?.status === "done") return "已完成";
   return messageCount ? "已保存" : "空对话";
 }
+function normalizeKnowledgeDraft(payload) {
+  const herb = { ...emptyKnowledgeDraft.herb, ...(payload?.herb || {}) };
+  const relations = Array.isArray(payload?.relations) ? payload.relations : [];
+  const subjectType = herb.label || "Herb";
+  return {
+    herb,
+    relations: relations.map((relation) => ({
+      subject: relation.subject || herb.name || "",
+      subject_type: relation.subject_type || subjectType,
+      relation: relation.relation || "HAS_EFFECT",
+      object: relation.object || "",
+      object_type: relation.object_type || "Effect",
+    })),
+  };
+}
+
+function buildPreviewGraphFromDraft(payload) {
+  const draft = normalizeKnowledgeDraft(payload);
+  const label = draft.herb.label || "Formula";
+  const centerId = `${label}:${draft.herb.name || "未命名方药"}`;
+  if (!draft.herb.name) return { nodes: [], edges: [] };
+  const nodes = [{
+    id: centerId,
+    name: draft.herb.name,
+    label,
+    properties: Object.fromEntries(Object.entries(draft.herb).filter(([, value]) => value)),
+  }];
+  const edges = [];
+  const known = new Set([centerId]);
+  draft.relations.forEach((relation) => {
+    if (!relation.object) return;
+    const objectLabel = relation.object_type || "Entity";
+    const objectId = `${objectLabel}:${relation.object}`;
+    if (!known.has(objectId)) {
+      known.add(objectId);
+      nodes.push({ id: objectId, name: relation.object, label: objectLabel, properties: {} });
+    }
+    edges.push({ id: `${centerId}-${relation.relation}-${objectId}`, source: centerId, target: objectId, label: relation.relation });
+  });
+  return { nodes, edges };
+}
+
+function toRenderableGraph(graph, focus) {
+  const rawNodes = Array.isArray(graph?.nodes) ? graph.nodes : [];
+  const rawEdges = Array.isArray(graph?.edges) ? graph.edges : [];
+  const nodes = rawNodes.map((node) => ({
+    ...node,
+    val: node.name === focus ? 8 : 4,
+    color: entityColor(node.label, node.name === focus),
+  }));
+  return {
+    nodes,
+    links: rawEdges.map((edge) => ({ ...edge, source: edge.source, target: edge.target, color: relationColor(edge.label) })),
+  };
+}
 function appendToLastAssistant(messages, chunk) { const next = [...messages]; const lastIndex = next.length - 1; if (lastIndex >= 0 && next[lastIndex].role === "assistant") { next[lastIndex] = { ...next[lastIndex], content: next[lastIndex].content + chunk }; return next; } return [...next, { role: "assistant", content: chunk }]; }
+function appendAssistantError(messages, message = chatStreamErrorMessage) {
+  const next = [...messages];
+  const lastIndex = next.length - 1;
+  if (lastIndex < 0 || next[lastIndex].role !== "assistant") {
+    return [...next, { role: "assistant", content: message }];
+  }
+  const content = String(next[lastIndex].content || "").trim();
+  next[lastIndex] = {
+    ...next[lastIndex],
+    content: content ? `${next[lastIndex].content}\n\n${message}` : message,
+  };
+  return next;
+}
 function markInterruptedAssistant(messages) {
   const next = [...messages];
   const lastIndex = next.length - 1;

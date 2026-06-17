@@ -120,13 +120,16 @@ def search_with_threshold(index: faiss.Index, query_text: str, k: int = 3, thres
     filtered_results = []
 
     for dist, idx in zip(distances, indices):
+        matched_text = id2text.get(int(idx)) if id2text else None
+        if not matched_text:
+            continue
         similarity = 1 / (1 + dist)
         if similarity >= threshold:
             filtered_results.append({
                 "id": int(idx),
                 "distance": float(dist),
                 "similarity": float(similarity),
-                "text": id2text.get(int(idx), "未知文本")
+                "text": matched_text
             })
 
     return filtered_results

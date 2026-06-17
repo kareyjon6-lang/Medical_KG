@@ -210,6 +210,33 @@ def test_chat_job_endpoint_uses_job_id_as_graph_queue_key(monkeypatch, tmp_path)
     assert job["status"] == "done"
 
 
+def test_chat_job_stream_returns_error_event_when_graph_task_fails(monkeypatch, tmp_path):
+    main = load_main_with_sqlite(monkeypatch, tmp_path)
+    client = TestClient(main.app, raise_server_exceptions=False)
+
+    async def failing_legacy_task(input_text, user_id):
+        raise RuntimeError("peer closed connection without sending complete message body (incomplete chunked read)")
+
+    monkeypatch.setattr(main, "_legacy_zhongyi_task", failing_legacy_task)
+    auth = client.post("/api/auth/register", json={"username": "job_error_user", "password": "secret123"}).json()
+    headers = {"Authorization": f"Bearer {auth['token']}"}
+    thread = client.post("/api/chat/threads", json={"title": "异常测试"}, headers=headers).json()["thread"]
+
+    response = client.post(
+        "/api/chat/jobs",
+        json={"input": "肚子难受怎么办？", "thread_id": thread["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert '"type": "error"' in response.text
+    assert "回答生成中断，请稍后重试。" in response.text
+    assert "peer closed connection" not in response.text
+    job_id = response.text.split('"job_id": "')[1].split('"', 1)[0]
+    job = client.get(f"/api/chat/jobs/{job_id}", headers=headers).json()["job"]
+    assert job["status"] == "failed"
+
+
 def test_same_thread_new_job_cancels_previous_active_job_but_other_threads_keep_running(monkeypatch, tmp_path):
     main = load_main_with_sqlite(monkeypatch, tmp_path)
     client = TestClient(main.app)
@@ -291,3 +318,86 @@ def test_admin_login_and_user_management_routes(monkeypatch, tmp_path):
 
     admin_id = admin.json()["user"]["id"]
     assert client.delete(f"/api/admin/users/{admin_id}", headers=admin_headers).status_code == 400
+
+
+def test_admin_knowledge_import_routes(monkeypatch, tmp_path):
+    monkeypatch.setenv("TCM_ADMIN_USERNAME", "admin")
+    monkeypatch.setenv("TCM_ADMIN_PASSWORD", "admin123")
+    main = load_main_with_sqlite(monkeypatch, tmp_path)
+    client = TestClient(main.app)
+
+    def fake_extract(text):
+        assert "艾叶" in text
+        return {
+            "herb": {"name": "艾叶", "effect": "温经止血"},
+            "relations": [{"relation": "HAS_EFFECT", "object": "温经止血", "object_type": "Effect"}],
+        }
+
+    imported_payloads = []
+
+    def fake_import(_neo4j_client, payload):
+        imported_payloads.append(payload)
+        return {"entities": 2, "relations": 1}
+
+    deleted_names = []
+
+    def fake_delete(_neo4j_client, name):
+        deleted_names.append(name)
+        return {"deleted": 1, "name": name, "labels": ["Herb"]}
+
+    monkeypatch.setattr(main, "extract_herb_knowledge", fake_extract)
+    monkeypatch.setattr(main, "import_knowledge_to_neo4j", fake_import)
+    monkeypatch.setattr(main, "delete_formula_from_neo4j", fake_delete)
+
+    ordinary = client.post("/api/auth/register", json={"username": "knowledge_user", "password": "secret123"}).json()
+    ordinary_headers = {"Authorization": f"Bearer {ordinary['token']}"}
+    assert client.get("/api/admin/knowledge/imports", headers=ordinary_headers).status_code == 403
+
+    admin = client.post("/api/auth/admin/login", json={"username": "admin", "password": "admin123"}).json()
+    admin_headers = {"Authorization": f"Bearer {admin['token']}"}
+
+    extracted = client.post(
+        "/api/admin/knowledge/extract",
+        data={"text": "艾叶，具有温经止血的功效。"},
+        headers=admin_headers,
+    )
+    assert extracted.status_code == 200
+    body = extracted.json()
+    assert body["extracted"]["herb"]["name"] == "艾叶"
+    assert "job" not in body
+    assert body["preview_graph"]["nodes"]
+    assert client.get("/api/admin/knowledge/imports", headers=admin_headers).json()["items"] == []
+
+    imported = client.post(
+        "/api/admin/knowledge/import",
+        json={"job_id": "", "extracted": body["extracted"]},
+        headers=admin_headers,
+    )
+    assert imported.status_code == 200
+    assert imported.json()["result"] == {"entities": 2, "relations": 1}
+    assert imported_payloads[0]["herb"]["name"] == "艾叶"
+
+    items = client.get("/api/admin/knowledge/imports", headers=admin_headers).json()["items"]
+    assert items[0]["operation_type"] == "add"
+    assert items[0]["is_committed"] is True
+    assert items[0]["entity_name"] == "艾叶"
+    assert items[0]["extracted"]["herb"]["name"] == "艾叶"
+
+    deleted = client.post(
+        "/api/admin/knowledge/delete",
+        json={"name": "艾叶"},
+        headers=admin_headers,
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["result"]["deleted"] == 1
+    assert deleted_names == ["艾叶"]
+    items = client.get("/api/admin/knowledge/imports", headers=admin_headers).json()["items"]
+    assert [item["operation_type"] for item in items[:2]] == ["delete", "add"]
+
+    rejected_doc = client.post(
+        "/api/admin/knowledge/extract",
+        files={"file": ("old.doc", b"binary", "application/msword")},
+        headers=admin_headers,
+    )
+    assert rejected_doc.status_code == 400
+    assert "docx" in str(rejected_doc.json()["detail"])

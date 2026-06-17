@@ -2,8 +2,9 @@ import asyncio
 import json
 import os
 from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
@@ -12,6 +13,15 @@ from common.config import Config
 from __005__fastapi.__003__msg_queue import put_done_to_msg, msg_queue_manager
 from __005__fastapi.app.services.auth_service import AuthError, AuthService
 from __005__fastapi.app.services.graph_service import build_knowledge_graph
+from __005__fastapi.app.services.knowledge_import_service import (
+    FormulaNotFoundError,
+    build_preview_graph,
+    delete_formula_from_neo4j,
+    extract_herb_knowledge,
+    import_knowledge_to_neo4j,
+    parse_document_text,
+    summarize_source_text,
+)
 from __005__fastapi.app.services.search_service import build_search_results
 from common.neo4j_manager import neo4j_client
 from common.pg_memory_store import get_memory_store
@@ -67,8 +77,22 @@ class ChatJobRequest(BaseModel):
     thread_id: str = Field(..., min_length=1)
 
 
+class KnowledgeImportRequest(BaseModel):
+    job_id: str = ""
+    extracted: Dict[str, Any]
+
+
+class KnowledgeDeleteRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+
+
 @app.on_event("startup")
 async def warmup_runtime_models():
+    try:
+        await asyncio.to_thread(memory_store.init_schema)
+    except Exception as exc:
+        print(f"数据库结构检查失败: {exc}")
+
     try:
         from common.tcm_entity_extractor import extract_tcm_entities
 
@@ -81,8 +105,10 @@ async def warmup_runtime_models():
         from __004__langgraph_more_nodes.nodes import match_entity_from_neo4j_node as match_node
 
         await asyncio.to_thread(embedding_model.encode, ["模型预热"], convert_to_numpy=True)
-        await asyncio.to_thread(match_node.load_index)
-        await asyncio.to_thread(match_node.load_id2text)
+        if getattr(match_node, "zhongyi_index", None) is None:
+            match_node.zhongyi_index = await asyncio.to_thread(match_node.load_index)
+        if getattr(match_node, "zhongyi_id2text", None) is None:
+            match_node.zhongyi_id2text = await asyncio.to_thread(match_node.load_id2text)
     except Exception as exc:
         print(f"FAISS/embedding 预热失败: {exc}")
 
@@ -230,6 +256,86 @@ async def admin_delete_user(user_id: str, authorization: str = Header(default=""
     return {"status": "ok"}
 
 
+@app.post("/api/admin/knowledge/extract")
+async def admin_extract_knowledge(
+    authorization: str = Header(default=""),
+    text: str = Form(default=""),
+    file: Optional[UploadFile] = File(default=None),
+):
+    admin = require_admin(authorization)
+    source_type = "text"
+    file_name = ""
+    source_text = text.strip()
+    try:
+        if file and file.filename:
+            source_type = "file"
+            file_name = file.filename
+            source_text = parse_document_text(file.filename, await file.read())
+        if not source_text:
+            raise ValueError("请输入文本或上传 txt、md、pdf、docx 文档。")
+        extracted = await asyncio.to_thread(extract_herb_knowledge, source_text)
+        preview_graph = build_preview_graph(extracted)
+        return {
+            "extracted": extracted,
+            "preview_graph": preview_graph,
+            "source": {
+                "source_type": source_type,
+                "file_name": file_name,
+                "summary": summarize_source_text(source_text),
+            },
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
+
+
+@app.post("/api/admin/knowledge/import")
+async def admin_import_knowledge(request: KnowledgeImportRequest, authorization: str = Header(default="")):
+    admin = require_admin(authorization)
+    try:
+        result = await asyncio.to_thread(import_knowledge_to_neo4j, neo4j_client, request.extracted)
+        herb = request.extracted.get("herb", {}) if isinstance(request.extracted, dict) else {}
+        job = memory_store.create_knowledge_operation_record(
+            admin["id"],
+            "add",
+            herb.get("name", ""),
+            request.extracted,
+            source_type="manual",
+            source_summary=summarize_source_text(json.dumps(request.extracted, ensure_ascii=False)),
+        )
+        return {"status": "ok", "result": result, "job": job}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/admin/knowledge/delete")
+async def admin_delete_knowledge(request: KnowledgeDeleteRequest, authorization: str = Header(default="")):
+    admin = require_admin(authorization)
+    try:
+        result = await asyncio.to_thread(delete_formula_from_neo4j, neo4j_client, request.name)
+        job = memory_store.create_knowledge_operation_record(
+            admin["id"],
+            "delete",
+            result.get("name") or request.name,
+            {"deleted": result},
+            source_type="manual",
+            source_summary=f"删除方药：{result.get('name') or request.name}",
+        )
+        return {"status": "ok", "result": result, "job": job}
+    except FormulaNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": str(exc), "suggestions": exc.suggestions},
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/admin/knowledge/imports")
+async def admin_knowledge_imports(authorization: str = Header(default=""), limit: int = Query(50, ge=1, le=200)):
+    admin = require_admin(authorization)
+    return {"items": memory_store.list_knowledge_import_jobs(admin["id"], limit=limit)}
+
+
 @app.get("/api/search")
 async def search(
     q: str = Query(default=""),
@@ -273,6 +379,9 @@ def stream_event(event_type: str, msg: str = "", progress=None, job_id=None, thr
     if thread_id:
         payload["thread_id"] = thread_id
     return json.dumps(payload, ensure_ascii=False) + "\n"
+
+
+CHAT_STREAM_ERROR_MESSAGE = "回答生成中断，请稍后重试。"
 
 
 def infer_progress_from_thought(message: str):
@@ -405,7 +514,7 @@ async def generate_job_stream(input_text, user, thread_id=None, job_id=None):
                 error=str(exc),
                 finished_at=datetime.now(timezone.utc).isoformat(),
             )
-        raise
+        yield stream_event("error", CHAT_STREAM_ERROR_MESSAGE, 100, job_id=job_id, thread_id=thread_id)
 
 
 async def generate_legacy_stream(input_text, user, thread_id=None):

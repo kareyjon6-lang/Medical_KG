@@ -37,6 +37,25 @@ def test_long_term_memory_upserts_by_key(tmp_path):
     ]
 
 
+def test_postgres_placeholder_conversion_preserves_json_default_literal():
+    store = PgMemoryStore("postgresql://example")
+
+    converted = store._placeholder(
+        """
+        CREATE TABLE IF NOT EXISTS knowledge_import_jobs (
+            extracted_json TEXT NOT NULL DEFAULT '{}',
+            admin_id TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            file_name TEXT NOT NULL DEFAULT ''
+        )
+        INSERT INTO users (id) VALUES ({0})
+        """
+    )
+
+    assert "DEFAULT '{}'" in converted
+    assert "VALUES (%s)" in converted
+
+
 def test_chat_history_includes_message_metadata_in_chronological_order(tmp_path):
     store = PgMemoryStore(f"sqlite:///{tmp_path / 'test.db'}")
     store.init_schema()
@@ -146,3 +165,49 @@ def test_user_roles_listing_and_delete_cascade(tmp_path):
     assert store.get_thread_messages(user["id"], thread["id"]) == []
     assert store.get_memories(user["id"]) == []
     assert store.get_chat_job(user["id"], job["id"]) is None
+
+
+def test_knowledge_operation_records_roundtrip_and_prunes_legacy(tmp_path):
+    store = PgMemoryStore(f"sqlite:///{tmp_path / 'test.db'}")
+    store.init_schema()
+    admin = store.create_user("knowledge_admin", "secret123", role="admin")
+    payload = {
+        "herb": {"name": "阿胶鸡子黄汤", "label": "Formula", "effect": "养血滋阴"},
+        "relations": [{"relation": "HAS_EFFECT", "object": "温经止血", "object_type": "Effect"}],
+    }
+
+    legacy = store.create_knowledge_import_job(
+        admin["id"],
+        "text",
+        "",
+        "错误旧记录。",
+        payload,
+    )
+    assert legacy["is_committed"] is False
+    assert store.list_knowledge_import_jobs(admin["id"]) == []
+
+    added = store.create_knowledge_operation_record(
+        admin["id"],
+        "add",
+        "阿胶鸡子黄汤",
+        payload,
+        source_summary="确认导入阿胶鸡子黄汤。",
+    )
+    deleted = store.create_knowledge_operation_record(
+        admin["id"],
+        "delete",
+        "阿胶鸡子黄汤",
+        {"deleted": {"name": "阿胶鸡子黄汤"}},
+    )
+
+    assert added["operation_type"] == "add"
+    assert added["entity_name"] == "阿胶鸡子黄汤"
+    assert added["is_committed"] is True
+    assert deleted["operation_type"] == "delete"
+
+    items = store.list_knowledge_import_jobs(admin["id"])
+    assert [item["operation_type"] for item in items] == ["delete", "add"]
+    assert all(item["is_committed"] for item in items)
+
+    store.init_schema()
+    assert [item["id"] for item in store.list_knowledge_import_jobs(admin["id"])] == [deleted["id"], added["id"]]

@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import json
 import os
 import secrets
 import sqlite3
@@ -84,6 +85,25 @@ class PgMemoryStore:
             )
             """,
             """
+            CREATE TABLE IF NOT EXISTS knowledge_import_jobs (
+                id TEXT PRIMARY KEY,
+                admin_id TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                file_name TEXT NOT NULL DEFAULT '',
+                source_summary TEXT NOT NULL DEFAULT '',
+                extracted_json TEXT NOT NULL DEFAULT '{}',
+                operation_type TEXT NOT NULL DEFAULT 'legacy',
+                entity_name TEXT NOT NULL DEFAULT '',
+                is_committed INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'draft',
+                error TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                finished_at TIMESTAMP,
+                FOREIGN KEY(admin_id) REFERENCES users(id)
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS user_memories (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,
@@ -102,6 +122,8 @@ class PgMemoryStore:
             self._ensure_user_role(conn)
             self._ensure_chat_message_thread_id(conn)
             self._ensure_chat_jobs(conn)
+            self._ensure_knowledge_import_jobs(conn)
+            self._prune_legacy_knowledge_import_jobs(conn)
             self._commit(conn)
         self.ensure_default_admin()
 
@@ -576,6 +598,181 @@ class PgMemoryStore:
             self._commit(conn)
         return int(cursor.rowcount or 0)
 
+    def create_knowledge_import_job(
+        self,
+        admin_id: str,
+        source_type: str,
+        file_name: str,
+        source_summary: str,
+        extracted_payload: Dict[str, Any],
+        status: str = "extracted",
+        error: str = "",
+    ) -> Dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        job = {
+            "id": secrets.token_hex(16),
+            "admin_id": admin_id,
+            "source_type": source_type,
+            "file_name": file_name or "",
+            "source_summary": source_summary or "",
+            "extracted_json": json.dumps(extracted_payload or {}, ensure_ascii=False),
+            "status": status,
+            "error": error or "",
+            "created_at": now,
+            "updated_at": now,
+            "finished_at": now if status in {"imported", "failed"} else None,
+        }
+        with self._connect() as conn:
+            self._execute(
+                conn,
+                """
+                INSERT INTO knowledge_import_jobs (
+                    id, admin_id, source_type, file_name, source_summary, extracted_json,
+                    status, error, created_at, updated_at, finished_at
+                )
+                VALUES ({0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0})
+                """,
+                [
+                    job["id"],
+                    admin_id,
+                    job["source_type"],
+                    job["file_name"],
+                    job["source_summary"],
+                    job["extracted_json"],
+                    job["status"],
+                    job["error"],
+                    job["created_at"],
+                    job["updated_at"],
+                    job["finished_at"],
+                ],
+            )
+            self._commit(conn)
+        return self._public_knowledge_import_job(job)
+
+    def create_knowledge_operation_record(
+        self,
+        admin_id: str,
+        operation_type: str,
+        entity_name: str,
+        extracted_payload: Dict[str, Any],
+        source_type: str = "manual",
+        file_name: str = "",
+        source_summary: str = "",
+        error: str = "",
+    ) -> Dict[str, Any]:
+        clean_operation = operation_type if operation_type in {"add", "delete"} else "add"
+        clean_entity_name = str(entity_name or "").strip()
+        if not clean_entity_name:
+            herb = extracted_payload.get("herb", {}) if isinstance(extracted_payload, dict) else {}
+            clean_entity_name = str(herb.get("name") or "").strip()
+        if not clean_entity_name:
+            raise ValueError("正式记录缺少方药名称。")
+        now = datetime.now(timezone.utc).isoformat()
+        job = {
+            "id": secrets.token_hex(16),
+            "admin_id": admin_id,
+            "source_type": source_type or "manual",
+            "file_name": file_name or "",
+            "source_summary": source_summary or "",
+            "extracted_json": json.dumps(extracted_payload or {}, ensure_ascii=False),
+            "operation_type": clean_operation,
+            "entity_name": clean_entity_name,
+            "is_committed": 1,
+            "status": "committed",
+            "error": error or "",
+            "created_at": now,
+            "updated_at": now,
+            "finished_at": now,
+        }
+        with self._connect() as conn:
+            self._execute(
+                conn,
+                """
+                INSERT INTO knowledge_import_jobs (
+                    id, admin_id, source_type, file_name, source_summary, extracted_json,
+                    operation_type, entity_name, is_committed, status, error,
+                    created_at, updated_at, finished_at
+                )
+                VALUES ({0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0})
+                """,
+                [
+                    job["id"],
+                    admin_id,
+                    job["source_type"],
+                    job["file_name"],
+                    job["source_summary"],
+                    job["extracted_json"],
+                    job["operation_type"],
+                    job["entity_name"],
+                    job["is_committed"],
+                    job["status"],
+                    job["error"],
+                    job["created_at"],
+                    job["updated_at"],
+                    job["finished_at"],
+                ],
+            )
+            self._commit(conn)
+        return self._public_knowledge_import_job(job)
+
+    def update_knowledge_import_job(self, admin_id: str, job_id: str, **fields) -> Optional[Dict[str, Any]]:
+        allowed = {"status", "error", "extracted_payload", "finished_at"}
+        updates = {}
+        for key, value in fields.items():
+            if key not in allowed:
+                continue
+            if key == "extracted_payload":
+                updates["extracted_json"] = json.dumps(value or {}, ensure_ascii=False)
+            else:
+                updates[key] = value
+        if not updates:
+            return self.get_knowledge_import_job(admin_id, job_id)
+        updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+        assignments = ", ".join(f"{key} = {{0}}" for key in updates)
+        values = list(updates.values()) + [admin_id, job_id]
+        with self._connect() as conn:
+            self._execute(
+                conn,
+                f"UPDATE knowledge_import_jobs SET {assignments} WHERE admin_id = {{0}} AND id = {{0}}",
+                values,
+            )
+            self._commit(conn)
+        return self.get_knowledge_import_job(admin_id, job_id)
+
+    def get_knowledge_import_job(self, admin_id: str, job_id: str) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            rows = self._query(
+                conn,
+                """
+                SELECT id, admin_id, source_type, file_name, source_summary, extracted_json,
+                       operation_type, entity_name, is_committed, status, error,
+                       created_at, updated_at, finished_at
+                FROM knowledge_import_jobs
+                WHERE admin_id = {0} AND id = {0}
+                """,
+                [admin_id, job_id],
+            )
+        return self._public_knowledge_import_job(rows[0]) if rows else None
+
+    def list_knowledge_import_jobs(self, admin_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        with self._connect() as conn:
+            rows = self._query(
+                conn,
+                """
+                SELECT id, admin_id, source_type, file_name, source_summary, extracted_json,
+                       operation_type, entity_name, is_committed, status, error,
+                       created_at, updated_at, finished_at
+                FROM knowledge_import_jobs
+                WHERE admin_id = {0}
+                  AND is_committed = 1
+                  AND operation_type IN ({0}, {0})
+                ORDER BY created_at DESC, id DESC
+                LIMIT {0}
+                """,
+                [admin_id, "add", "delete", int(limit)],
+            )
+        return [self._public_knowledge_import_job(row) for row in rows]
+
     def get_recent_messages(self, user_id: str, limit: int = 10) -> List[Dict[str, str]]:
         with self._connect() as conn:
             rows = self._query(
@@ -699,6 +896,32 @@ class PgMemoryStore:
         self._execute_raw(conn, "ALTER TABLE chat_jobs ADD COLUMN IF NOT EXISTS error TEXT NOT NULL DEFAULT ''")
         self._execute_raw(conn, "ALTER TABLE chat_jobs ADD COLUMN IF NOT EXISTS finished_at TIMESTAMP")
 
+    def _ensure_knowledge_import_jobs(self, conn) -> None:
+        if self.is_sqlite:
+            columns = self._query_raw(conn, "PRAGMA table_info(knowledge_import_jobs)")
+            names = {row.get("name") for row in columns}
+            if "operation_type" not in names:
+                self._execute_raw(conn, "ALTER TABLE knowledge_import_jobs ADD COLUMN operation_type TEXT NOT NULL DEFAULT 'legacy'")
+            if "entity_name" not in names:
+                self._execute_raw(conn, "ALTER TABLE knowledge_import_jobs ADD COLUMN entity_name TEXT NOT NULL DEFAULT ''")
+            if "is_committed" not in names:
+                self._execute_raw(conn, "ALTER TABLE knowledge_import_jobs ADD COLUMN is_committed INTEGER NOT NULL DEFAULT 0")
+            return
+        self._execute_raw(conn, "ALTER TABLE knowledge_import_jobs ADD COLUMN IF NOT EXISTS operation_type TEXT NOT NULL DEFAULT 'legacy'")
+        self._execute_raw(conn, "ALTER TABLE knowledge_import_jobs ADD COLUMN IF NOT EXISTS entity_name TEXT NOT NULL DEFAULT ''")
+        self._execute_raw(conn, "ALTER TABLE knowledge_import_jobs ADD COLUMN IF NOT EXISTS is_committed INTEGER NOT NULL DEFAULT 0")
+
+    def _prune_legacy_knowledge_import_jobs(self, conn) -> None:
+        self._execute(
+            conn,
+            """
+            DELETE FROM knowledge_import_jobs
+            WHERE is_committed <> {0}
+               OR operation_type NOT IN ({0}, {0})
+            """,
+            [1, "add", "delete"],
+        )
+
     def _ensure_user_role(self, conn) -> None:
         if self.is_sqlite:
             columns = self._query_raw(conn, "PRAGMA table_info(users)")
@@ -714,7 +937,7 @@ class PgMemoryStore:
 
     def _placeholder(self, statement: str) -> str:
         placeholder = "?" if self.is_sqlite else "%s"
-        return statement.format(placeholder)
+        return statement.replace("{0}", placeholder)
 
     def _commit(self, conn) -> None:
         conn.commit()
@@ -730,6 +953,28 @@ class PgMemoryStore:
             "progress": int(row.get("progress") or 0),
             "thoughts": row.get("thoughts") or "",
             "answer": row.get("answer") or "",
+            "error": row.get("error") or "",
+            "created_at": str(row.get("created_at") or ""),
+            "updated_at": str(row.get("updated_at") or ""),
+            "finished_at": str(row.get("finished_at") or ""),
+        }
+
+    def _public_knowledge_import_job(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            extracted = json.loads(row.get("extracted_json") or "{}")
+        except Exception:
+            extracted = {}
+        return {
+            "id": row["id"],
+            "admin_id": row["admin_id"],
+            "source_type": row.get("source_type") or "",
+            "file_name": row.get("file_name") or "",
+            "source_summary": row.get("source_summary") or "",
+            "extracted": extracted,
+            "operation_type": row.get("operation_type") or "legacy",
+            "entity_name": row.get("entity_name") or extracted.get("herb", {}).get("name", ""),
+            "is_committed": bool(int(row.get("is_committed") or 0)),
+            "status": row.get("status") or "draft",
             "error": row.get("error") or "",
             "created_at": str(row.get("created_at") or ""),
             "updated_at": str(row.get("updated_at") or ""),

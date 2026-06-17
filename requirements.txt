@@ -14,3 +14,6 @@ tqdm
 pydantic
 pytest
 psycopg[binary]
+pypdf
+python-docx
+python-multipart

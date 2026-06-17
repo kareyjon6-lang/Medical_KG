@@ -18,6 +18,7 @@ from transformers import (
     TrainingArguments,
 )
 
+# 当前仓库本次发布重点是方药增删链路与问答页优化，训练脚本继续作为本地模型维护工具保留。
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))

@@ -52,6 +52,42 @@ export function chatJobsUrl(jobId = "") {
 }
 
 
+export function adminKnowledgeImportsUrl() {
+  return buildApiUrl("/api/admin/knowledge/imports");
+}
+
+export function formatShanghaiDateTime(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+
+  const normalized = text
+    .replace(" ", "T")
+    .replace(/\.(\d{3})\d+/, ".$1");
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+  const date = new Date(hasTimezone ? normalized : `${normalized}Z`);
+  if (Number.isNaN(date.getTime())) return text;
+
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("zh-CN", {
+      timeZone: "Asia/Shanghai",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+      hourCycle: "h23",
+    })
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value])
+  );
+
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+}
+
+
 export async function authRequest(path, username, password) {
   const response = await fetch(buildApiUrl(path), {
     method: "POST",
@@ -338,6 +374,88 @@ export async function deleteAdminUser(token, userId) {
     throw new Error(`Delete admin user request failed with ${response.status}`);
   }
   return response.json();
+}
+
+
+export async function extractKnowledge(token, { text = "", file = null } = {}) {
+  const formData = new FormData();
+  formData.set("text", text || "");
+  if (file) {
+    formData.set("file", file);
+  }
+  const response = await fetch(buildApiUrl("/api/admin/knowledge/extract"), {
+    method: "POST",
+    headers: authHeaders(token),
+    body: formData,
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = await response.json();
+      detail = typeof payload.detail === "string" ? payload.detail : payload.detail?.message || "";
+    } catch (error) {
+      detail = "";
+    }
+    throw new Error(detail || `Extract knowledge request failed with ${response.status}`);
+  }
+  return response.json();
+}
+
+
+export async function importKnowledge(token, jobId, extracted) {
+  const response = await fetch(buildApiUrl("/api/admin/knowledge/import"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(token) },
+    body: JSON.stringify({ job_id: jobId || "", extracted }),
+  });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, `Import knowledge request failed with ${response.status}`));
+  }
+  return response.json();
+}
+
+
+export async function deleteKnowledge(token, name) {
+  const response = await fetch(buildApiUrl("/api/admin/knowledge/delete"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(token) },
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = await response.json();
+      detail = typeof payload.detail === "string" ? payload.detail : payload.detail?.message || "";
+    } catch (error) {
+      detail = "";
+    }
+    throw new Error(detail || `Delete knowledge request failed with ${response.status}`);
+  }
+  return response.json();
+}
+
+
+export async function fetchKnowledgeImports(token, limit = 50) {
+  const response = await fetch(buildApiUrl("/api/admin/knowledge/imports", { limit }), {
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    throw new Error(`Knowledge imports request failed with ${response.status}`);
+  }
+  return response.json();
+}
+
+
+async function readErrorMessage(response, fallback) {
+  try {
+    const payload = await response.json();
+    if (typeof payload.detail === "string") return payload.detail;
+    if (payload.detail?.message) return payload.detail.message;
+    if (payload.message) return payload.message;
+  } catch (error) {
+    return fallback;
+  }
+  return fallback;
 }
 
 
