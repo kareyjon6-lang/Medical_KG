@@ -27,6 +27,7 @@ from common.neo4j_manager import neo4j_client
 from common.pg_memory_store import get_memory_store
 
 
+# 这里集中暴露认证、问答、检索、图谱和方药管理相关 HTTP 接口。
 def get_frontend_origins():
     defaults = ["http://localhost:3010", "http://127.0.0.1:3010"]
     configured = os.getenv("FRONTEND_ORIGINS", "")
