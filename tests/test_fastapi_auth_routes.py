@@ -7,6 +7,7 @@ from __005__fastapi.__003__msg_queue import put_done_to_msg, put_stream_text_to_
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
 
 
+# 这里覆盖认证、问答流、线程隔离和后台知识管理接口的行为验证。
 def load_main_with_sqlite(monkeypatch, tmp_path):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'api.db'}")
     module = importlib.import_module("__005__fastapi.app.main")
