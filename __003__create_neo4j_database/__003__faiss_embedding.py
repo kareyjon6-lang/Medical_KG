@@ -3,6 +3,7 @@
 FAISS 向量存储 Demo
 接收文本列表，使用 embedding 模型转换为向量，存储到 FAISS 索引中，
 普通方药增删主链路不应默认调用这里的全量重建逻辑。
+这里的脚本职责更偏向初始化索引和离线维护，而不是实时问答接口。
 """
 import numpy as np
 import faiss
