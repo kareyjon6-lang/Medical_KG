@@ -16,6 +16,8 @@ from __004__langgraph_more_nodes.nodes.run_cypher_node import run_cypher_node
 from __004__langgraph_more_nodes.nodes.neo4j_answer_generate_node import neo4j_answer_generate_node
 from __004__langgraph_more_nodes.nodes.semantic_transcription_node import semantic_transcription_node
 
+
+# 这里统一编排问答图中的意图识别、实体匹配、Cypher 生成与答案生成节点。
 def build_graph():
     graph_builder = StateGraph(AgentState)
 
