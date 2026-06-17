@@ -13,6 +13,8 @@ DEFAULT_DATABASE_URL = "sqlite:///data/app_memory.sqlite3"
 
 
 class PgMemoryStore:
+    """统一管理用户、会话、对话历史与后台操作记录存储。"""
+
     def __init__(self, database_url: Optional[str] = None):
         self.database_url = database_url or os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
         self.is_sqlite = self.database_url.startswith("sqlite:")
