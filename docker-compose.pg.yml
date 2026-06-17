@@ -1,4 +1,4 @@
-# 本地 PostgreSQL 示例编排，供当前方药增删与问答页版本使用。
+# 本地 PostgreSQL 示例编排，负责给认证、历史会话与长期记忆提供存储。
 services:
   medical-kg-postgres:
     image: postgres:16-alpine
