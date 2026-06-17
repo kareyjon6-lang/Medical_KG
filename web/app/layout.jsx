@@ -8,6 +8,7 @@ export const metadata = {
 };
 
 
+// 前端入口布局负责加载全局样式与页面元信息。
 export default function RootLayout({ children }) {
   return (
     <html lang="zh-CN">
