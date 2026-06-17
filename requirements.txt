@@ -1,3 +1,4 @@
+# 后端依赖覆盖 Web API、LangGraph 问答链路、实体抽取和文档解析。
 fastapi
 uvicorn
 neo4j
