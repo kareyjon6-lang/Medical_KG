@@ -4,7 +4,7 @@ from langchain_core.messages import HumanMessage
 
 from __005__fastapi.__003__msg_queue import put_stream_text_to_msg, put_think_text_to_msg
 from __004__langgraph_more_nodes.nodes.runtime_config import get_thread_id
-from common.llm import my_llm
+from common.llm import llm_astream
 
 
 async def llm_direct_out_node(state: AgentState, config: RunnableConfig | None = None):
@@ -29,7 +29,7 @@ async def llm_direct_out_node(state: AgentState, config: RunnableConfig | None =
 
     # 调用大模型
     model_answer = ""
-    for chunk in my_llm.stream([HumanMessage(content=prompt)]):
+    async for chunk in llm_astream([HumanMessage(content=prompt)]):
         print(chunk.content, end="", flush=True)
         await put_stream_text_to_msg(user_id, chunk.content)
         model_answer += chunk.content

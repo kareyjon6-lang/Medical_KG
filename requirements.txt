@@ -18,3 +18,5 @@ psycopg[binary]
 pypdf
 python-docx
 python-multipart
+redis
+jieba

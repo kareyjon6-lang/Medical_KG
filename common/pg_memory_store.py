@@ -5,7 +5,7 @@ import os
 import secrets
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 
@@ -117,6 +117,28 @@ class PgMemoryStore:
                 FOREIGN KEY(user_id) REFERENCES users(id)
             )
             """,
+            """
+            CREATE TABLE IF NOT EXISTS qa_cache_entries (
+                id TEXT PRIMARY KEY,
+                question TEXT NOT NULL,
+                normalized_question TEXT NOT NULL,
+                question_hash TEXT NOT NULL UNIQUE,
+                answer TEXT NOT NULL,
+                question_tokens TEXT NOT NULL DEFAULT '[]',
+                answer_type TEXT NOT NULL DEFAULT 'medical_qa',
+                source TEXT NOT NULL DEFAULT 'generated',
+                quality_score REAL NOT NULL DEFAULT 0,
+                hit_count INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_hit_at TIMESTAMP,
+                expires_at TIMESTAMP,
+                is_seed INTEGER NOT NULL DEFAULT 0,
+                is_active INTEGER NOT NULL DEFAULT 1
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_qa_cache_hash ON qa_cache_entries(question_hash)",
+            "CREATE INDEX IF NOT EXISTS idx_qa_cache_active ON qa_cache_entries(is_active, expires_at, quality_score)",
         ]
         with self._connect() as conn:
             for statement in statements:
@@ -814,6 +836,201 @@ class PgMemoryStore:
             for row in reversed(rows)
         ]
 
+    def upsert_qa_cache_entry(
+        self,
+        question: str,
+        normalized_question: str,
+        question_hash: str,
+        answer: str,
+        question_tokens: List[str],
+        answer_type: str = "medical_qa",
+        source: str = "generated",
+        quality_score: float = 0.0,
+        expires_at: Optional[str] = None,
+        is_seed: bool = False,
+        is_active: bool = True,
+    ) -> Dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        tokens_json = json.dumps(question_tokens or [], ensure_ascii=False)
+        with self._connect() as conn:
+            existing = self._query(
+                conn,
+                "SELECT * FROM qa_cache_entries WHERE question_hash = {0} LIMIT 1",
+                [question_hash],
+            )
+            if existing:
+                current = self._public_qa_cache_entry(existing[0])
+                current_quality = float(current.get("quality_score") or 0)
+                should_replace_answer = quality_score >= current_quality
+                params = [
+                    question,
+                    normalized_question,
+                    tokens_json,
+                    answer_type,
+                    source,
+                    float(max(quality_score, current_quality)),
+                    expires_at,
+                    1 if is_seed else int(current.get("is_seed") or 0),
+                    1 if is_active else 0,
+                    now,
+                    question_hash,
+                ]
+                answer_assignment = "answer = {0}," if should_replace_answer else ""
+                if should_replace_answer:
+                    params.insert(3, answer)
+                self._execute(
+                    conn,
+                    f"""
+                    UPDATE qa_cache_entries
+                    SET question = {{0}},
+                        normalized_question = {{0}},
+                        question_tokens = {{0}},
+                        {answer_assignment}
+                        answer_type = {{0}},
+                        source = {{0}},
+                        quality_score = {{0}},
+                        expires_at = {{0}},
+                        is_seed = {{0}},
+                        is_active = {{0}},
+                        updated_at = {{0}}
+                    WHERE question_hash = {{0}}
+                    """,
+                    params,
+                )
+            else:
+                self._execute(
+                    conn,
+                    """
+                    INSERT INTO qa_cache_entries (
+                        id, question, normalized_question, question_hash, answer,
+                        question_tokens, answer_type, source, quality_score, hit_count,
+                        created_at, updated_at, last_hit_at, expires_at, is_seed, is_active
+                    )
+                    VALUES ({0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0})
+                    """,
+                    [
+                        secrets.token_hex(16),
+                        question,
+                        normalized_question,
+                        question_hash,
+                        answer,
+                        tokens_json,
+                        answer_type,
+                        source,
+                        float(quality_score),
+                        0,
+                        now,
+                        now,
+                        None,
+                        expires_at,
+                        1 if is_seed else 0,
+                        1 if is_active else 0,
+                    ],
+                )
+            self._commit(conn)
+        entry = self.get_qa_cache_by_hash(question_hash, include_inactive=True)
+        return entry or {}
+
+    def get_qa_cache_by_hash(self, question_hash: str, include_inactive: bool = False) -> Optional[Dict[str, Any]]:
+        now = datetime.now(timezone.utc).isoformat()
+        where = "question_hash = {0}"
+        params: List[Any] = [question_hash]
+        if not include_inactive:
+            where += " AND is_active = {0} AND (expires_at IS NULL OR expires_at > {0})"
+            params.extend([1, now])
+        with self._connect() as conn:
+            rows = self._query(
+                conn,
+                f"SELECT * FROM qa_cache_entries WHERE {where} LIMIT 1",
+                params,
+            )
+        return self._public_qa_cache_entry(rows[0]) if rows else None
+
+    def list_qa_cache_candidates(self, limit: int = 5000) -> List[Dict[str, Any]]:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            rows = self._query(
+                conn,
+                """
+                SELECT *
+                FROM qa_cache_entries
+                WHERE is_active = {0}
+                  AND quality_score >= {0}
+                  AND (expires_at IS NULL OR expires_at > {0})
+                ORDER BY hit_count DESC, quality_score DESC, updated_at DESC
+                LIMIT {0}
+                """,
+                [1, 0.7, now, int(limit)],
+            )
+        return [self._public_qa_cache_entry(row) for row in rows]
+
+    def record_qa_cache_hit(self, entry_id: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            rows = self._query(
+                conn,
+                "SELECT hit_count, expires_at, is_seed FROM qa_cache_entries WHERE id = {0} LIMIT 1",
+                [entry_id],
+            )
+            if not rows:
+                return
+            row = rows[0]
+            next_hit_count = int(row.get("hit_count") or 0) + 1
+            expires_at = row.get("expires_at")
+            if not int(row.get("is_seed") or 0) and next_hit_count >= 10:
+                hot_expires_at = (datetime.now(timezone.utc) + timedelta(days=180)).isoformat()
+                current_expires_at = str(expires_at or "")
+                if not current_expires_at or current_expires_at < hot_expires_at:
+                    expires_at = hot_expires_at
+            self._execute(
+                conn,
+                """
+                UPDATE qa_cache_entries
+                SET hit_count = {0},
+                    last_hit_at = {0},
+                    updated_at = {0},
+                    expires_at = {0}
+                WHERE id = {0}
+                """,
+                [next_hit_count, now, now, expires_at, entry_id],
+            )
+            self._commit(conn)
+
+    def prune_qa_cache_entries(self, max_entries: int = 50000) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            self._execute(
+                conn,
+                """
+                UPDATE qa_cache_entries
+                SET is_active = {0}, updated_at = {0}
+                WHERE is_seed = {0}
+                  AND expires_at IS NOT NULL
+                  AND expires_at <= {0}
+                """,
+                [0, now, 0, now],
+            )
+            count_rows = self._query(conn, "SELECT COUNT(*) AS count FROM qa_cache_entries WHERE is_active = {0}", [1])
+            active_count = int(count_rows[0]["count"] or 0) if count_rows else 0
+            overflow = active_count - int(max_entries)
+            if overflow > 0:
+                self._execute(
+                    conn,
+                    """
+                    UPDATE qa_cache_entries
+                    SET is_active = {0}, updated_at = {0}
+                    WHERE id IN (
+                        SELECT id
+                        FROM qa_cache_entries
+                        WHERE is_seed = {0} AND is_active = {0}
+                        ORDER BY quality_score ASC, hit_count ASC, COALESCE(last_hit_at, updated_at) ASC
+                        LIMIT {0}
+                    )
+                    """,
+                    [0, now, 0, 1, overflow],
+                )
+            self._commit(conn)
+
     def upsert_memory(self, user_id: str, memory_key: str, memory_value: str) -> None:
         if self.is_sqlite:
             statement = """
@@ -943,6 +1160,30 @@ class PgMemoryStore:
 
     def _commit(self, conn) -> None:
         conn.commit()
+
+    def _public_qa_cache_entry(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            question_tokens = json.loads(row.get("question_tokens") or "[]")
+        except Exception:
+            question_tokens = []
+        return {
+            "id": row["id"],
+            "question": row.get("question") or "",
+            "normalized_question": row.get("normalized_question") or "",
+            "question_hash": row.get("question_hash") or "",
+            "answer": row.get("answer") or "",
+            "question_tokens": question_tokens if isinstance(question_tokens, list) else [],
+            "answer_type": row.get("answer_type") or "medical_qa",
+            "source": row.get("source") or "generated",
+            "quality_score": float(row.get("quality_score") or 0),
+            "hit_count": int(row.get("hit_count") or 0),
+            "created_at": str(row.get("created_at") or ""),
+            "updated_at": str(row.get("updated_at") or ""),
+            "last_hit_at": str(row.get("last_hit_at") or ""),
+            "expires_at": str(row.get("expires_at") or ""),
+            "is_seed": bool(int(row.get("is_seed") or 0)),
+            "is_active": bool(int(row.get("is_active") or 0)),
+        }
 
     def _public_job(self, row: Dict[str, Any]) -> Dict[str, Any]:
         return {

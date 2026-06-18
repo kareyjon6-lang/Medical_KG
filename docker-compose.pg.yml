@@ -18,5 +18,25 @@ services:
       timeout: 5s
       retries: 10
 
+  medical-kg-redis:
+    image: redis:7.2-alpine
+    container_name: medical-kg-redis
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:16379:6379"
+    command:
+      [
+        "sh",
+        "-c",
+        "redis-server --save '' --appendonly no --protected-mode yes --requirepass \"$${REDIS_PASSWORD}\" --maxmemory 256mb --maxmemory-policy allkeys-lru",
+      ]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   medical_kg_postgres_data:

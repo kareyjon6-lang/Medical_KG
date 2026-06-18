@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from common.config import Config
@@ -25,6 +25,7 @@ from __005__fastapi.app.services.knowledge_import_service import (
 from __005__fastapi.app.services.search_service import build_search_results
 from common.neo4j_manager import neo4j_client
 from common.pg_memory_store import get_memory_store
+from common.qa_cache import SEED_QA_PAIRS, SharedQaCacheService, normalize_question
 
 
 # 这里集中暴露认证、问答、检索、图谱和方药管理相关 HTTP 接口。
@@ -46,6 +47,7 @@ app.add_middleware(
 )
 memory_store = get_memory_store()
 auth_service = AuthService(memory_store)
+qa_cache_service = SharedQaCacheService(memory_store)
 
 
 class ChatRequest(BaseModel):
@@ -91,6 +93,7 @@ class KnowledgeDeleteRequest(BaseModel):
 async def warmup_runtime_models():
     try:
         await asyncio.to_thread(memory_store.init_schema)
+        await qa_cache_service.ensure_seeded()
     except Exception as exc:
         print(f"数据库结构检查失败: {exc}")
 
@@ -163,7 +166,12 @@ async def chat(request: ChatRequest, authorization: str = Header(default="")):
     thread_id = user["id"]
     session_id = user.get("session_id")
     memory_store.append_chat_message(user["id"], session_id, "user", request.message)
-    answer = await zhongyi_response(request.message, thread_id)
+    cached = await qa_cache_service.lookup(request.message)
+    if cached:
+        answer = cached["answer"]
+    else:
+        answer = await zhongyi_response(request.message, thread_id)
+        await qa_cache_service.maybe_store_generated_answer(request.message, answer)
     memory_store.append_chat_message(user["id"], session_id, "assistant", answer)
     return ChatResponse(answer=answer, thread_id=thread_id)
 
@@ -420,14 +428,15 @@ async def generate_job_stream(input_text, user, thread_id=None, job_id=None):
         memory_store.update_chat_job(user_id, job_id, status="running", progress=1)
 
     memory_store.append_chat_message(user_id, session_id, "user", input_text, thread_id=thread_id)
-    quick_answer = quick_chat_answer(input_text)
-    if quick_answer:
-        thought = "识别为日常寒暄，直接生成回答"
+    cached_answer = await qa_cache_service.lookup(input_text)
+    if cached_answer:
+        assistant_answer = cached_answer["answer"]
+        thought = cached_answer.get("message") or "命中共享问答缓存"
         thoughts.append(thought)
         yield stream_event("think", f"{thought}\n", 60, job_id=job_id, thread_id=thread_id)
-        yield stream_event("stream", quick_answer, 95, job_id=job_id, thread_id=thread_id)
+        yield stream_event("stream", assistant_answer, 95, job_id=job_id, thread_id=thread_id)
         yield stream_event("done", progress=100, job_id=job_id, thread_id=thread_id)
-        memory_store.append_chat_message(user_id, session_id, "assistant", quick_answer, thread_id=thread_id)
+        memory_store.append_chat_message(user_id, session_id, "assistant", assistant_answer, thread_id=thread_id)
         if job_id:
             memory_store.update_chat_job(
                 user_id,
@@ -435,12 +444,12 @@ async def generate_job_stream(input_text, user, thread_id=None, job_id=None):
                 status="done",
                 progress=100,
                 thoughts="\n".join(thoughts),
-                answer=quick_answer,
+                answer=assistant_answer,
                 finished_at=datetime.now(timezone.utc).isoformat(),
             )
         return
 
-    thought = "进入默认图谱推理链路"
+    thought = "未命中共享问答缓存，进入知识图谱问答链路"
     thoughts.append(thought)
     yield stream_event("think", f"{thought}\n", 8, job_id=job_id, thread_id=thread_id)
     msg_queue = msg_queue_manager.get_msg_queue_by_user_id(graph_thread_id)
@@ -484,6 +493,7 @@ async def generate_job_stream(input_text, user, thread_id=None, job_id=None):
         assistant_message = "".join(assistant_chunks).strip()
         if assistant_message:
             memory_store.append_chat_message(user_id, session_id, "assistant", assistant_message, thread_id=thread_id)
+            await qa_cache_service.maybe_store_generated_answer(input_text, assistant_message)
         if job_id:
             memory_store.update_chat_job(
                 user_id,
@@ -524,16 +534,10 @@ async def generate_legacy_stream(input_text, user, thread_id=None):
 
 
 def quick_chat_answer(input_text: str):
-    normalized = "".join(str(input_text or "").strip().lower().split())
-    normalized = normalized.strip("，。！？!?~～,.")
-    if normalized in {"你好", "您好", "hello", "hi", "嗨", "在吗", "在嘛"}:
-        return "您好，请问您有什么中医相关的问题需要咨询？"
-    if normalized in {"你是谁", "你是什么", "介绍一下你", "你能做什么", "你会做什么"}:
-        return "我是中医知识图谱问答助手，可以围绕方剂、药材、功效、主治、禁忌和关联图谱进行解释。"
-    if normalized in {"谢谢", "感谢", "多谢", "辛苦了"}:
-        return "不客气，您可以继续问我方剂、药材或症状相关问题。"
-    if normalized in {"再见", "拜拜", "bye", "goodbye"}:
-        return "再见，祝您一切顺利。"
+    normalized = normalize_question(input_text)
+    for seed_question, seed_answer in SEED_QA_PAIRS:
+        if normalize_question(seed_question) == normalized:
+            return seed_answer
     return ""
 
 
@@ -544,18 +548,6 @@ async def process(data: dict, authorization: str = Header(default="")):
     thread_id = (data.get("thread_id") or "").strip() or None
     if thread_id:
         require_thread(user["id"], thread_id)
-    quick_answer = quick_chat_answer(input_text)
-    if quick_answer:
-        session_id = user.get("session_id")
-        memory_store.append_chat_message(user["id"], session_id, "user", input_text, thread_id=thread_id)
-        memory_store.append_chat_message(user["id"], session_id, "assistant", quick_answer, thread_id=thread_id)
-        payload = "\n".join([
-            json.dumps({"type": "think", "msg": "识别为日常寒暄，直接生成问候回复  \n"}, ensure_ascii=False),
-            json.dumps({"type": "stream", "msg": quick_answer}, ensure_ascii=False),
-            json.dumps({"type": "done"}, ensure_ascii=False),
-            "",
-        ])
-        return Response(content=payload, media_type="application/x-ndjson")
     return StreamingResponse(generate_job_stream(input_text, user, thread_id), media_type="application/x-ndjson")
 
 

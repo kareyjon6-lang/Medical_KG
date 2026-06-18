@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from common.pg_memory_store import PgMemoryStore, get_memory_store
 
 
@@ -211,3 +213,53 @@ def test_knowledge_operation_records_roundtrip_and_prunes_legacy(tmp_path):
 
     store.init_schema()
     assert [item["id"] for item in store.list_knowledge_import_jobs(admin["id"])] == [deleted["id"], added["id"]]
+
+
+def test_qa_cache_hit_count_extends_hot_generated_entries(tmp_path):
+    store = PgMemoryStore(f"sqlite:///{tmp_path / 'test.db'}")
+    store.init_schema()
+    entry = store.upsert_qa_cache_entry(
+        question="麻黄汤有什么功效？",
+        normalized_question="麻黄汤有什么功效",
+        question_hash="hot-cache-entry",
+        answer="麻黄汤具有发汗解表、宣肺平喘的作用，常用于外感风寒表实证相关表现。",
+        question_tokens=["麻黄汤", "功效"],
+        answer_type="medical_qa",
+        source="generated",
+        quality_score=0.95,
+        expires_at="2026-01-01T00:00:00+00:00",
+        is_seed=False,
+    )
+
+    for _ in range(10):
+        store.record_qa_cache_hit(entry["id"])
+
+    updated = store.get_qa_cache_by_hash("hot-cache-entry")
+
+    assert updated["hit_count"] == 10
+    assert datetime.fromisoformat(updated["expires_at"]) > datetime.fromisoformat("2026-01-01T00:00:00+00:00")
+
+
+def test_qa_cache_seed_hits_do_not_add_expiry(tmp_path):
+    store = PgMemoryStore(f"sqlite:///{tmp_path / 'test.db'}")
+    store.init_schema()
+    entry = store.upsert_qa_cache_entry(
+        question="你好",
+        normalized_question="你好",
+        question_hash="seed-cache-entry",
+        answer="您好，请问您有什么中医相关的问题需要咨询？",
+        question_tokens=["你好"],
+        answer_type="daily",
+        source="seed",
+        quality_score=1.0,
+        expires_at=None,
+        is_seed=True,
+    )
+
+    for _ in range(10):
+        store.record_qa_cache_hit(entry["id"])
+
+    updated = store.get_qa_cache_by_hash("seed-cache-entry")
+
+    assert updated["hit_count"] == 10
+    assert updated["expires_at"] == ""

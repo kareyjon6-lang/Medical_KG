@@ -12,7 +12,7 @@ from __005__fastapi.__003__msg_queue import put_think_text_to_msg, put_think_tex
     put_think_huiche_text_to_msg
 from __004__langgraph_more_nodes.nodes.runtime_config import get_thread_id
 from common.config import Config
-from common.llm import my_llm
+from common.llm import llm_runnable_astream, my_llm
 
 conf = Config()
 
@@ -179,7 +179,7 @@ async def generate_neo4j_cypher_node(state: AgentState, config: RunnableConfig |
     # 调用链式处理
     try:
         result = ""
-        for chunk in chain.stream({
+        async for chunk in llm_runnable_astream(chain, {
             "user_input": user_input,
             "matched_effects": matched_effects,
             "matched_diseases": matched_diseases,

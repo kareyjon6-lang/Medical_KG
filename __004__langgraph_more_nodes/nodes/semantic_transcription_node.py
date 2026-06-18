@@ -4,7 +4,7 @@ from langchain_core.runnables import RunnableConfig
 from __004__langgraph_more_nodes.agent_state import AgentState
 from __005__fastapi.__003__msg_queue import put_think_text_to_msg
 from __004__langgraph_more_nodes.nodes.runtime_config import get_thread_id
-from common.llm import my_llm
+from common.llm import llm_ainvoke
 from common.config import Config
 
 conf = Config()
@@ -56,7 +56,7 @@ async def semantic_transcription_node(state: AgentState, config: RunnableConfig 
 """
 
     # 调用大模型
-    response = my_llm.invoke([HumanMessage(content=prompt)])
+    response = await llm_ainvoke([HumanMessage(content=prompt)])
     result = response.content.strip()
 
     # 保存语义转写结果

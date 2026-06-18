@@ -12,6 +12,7 @@ class Config:
         self.MODEL_API_KEY = os.getenv("MODEL_API_KEY")
         self.MODEL_BASE_URL = os.getenv("MODEL_BASE_URL")
         self.MODEL_NAME = os.getenv("MODEL_NAME")
+        self.REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:16379/0")
 
         self.NEO4J_URI = os.getenv("NEO4J_URI")
         self.NEO4J_USER = os.getenv("NEO4J_USER")

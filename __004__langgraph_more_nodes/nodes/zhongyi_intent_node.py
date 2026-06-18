@@ -1,7 +1,7 @@
 from langchain_core.runnables import RunnableConfig
 from __004__langgraph_more_nodes.agent_state import AgentState
 from langchain_core.messages import HumanMessage
-from common.llm import my_llm
+from common.llm import llm_ainvoke
 from __005__fastapi.__003__msg_queue import put_think_text_to_msg
 from __004__langgraph_more_nodes.nodes.runtime_config import get_thread_id
 
@@ -40,7 +40,7 @@ async def zhongyi_intent_node(state: AgentState, config: RunnableConfig | None =
     """
 
     # 调用大模型
-    response = my_llm.invoke([HumanMessage(content=prompt)])
+    response = await llm_ainvoke([HumanMessage(content=prompt)])
     model_answer = response.content.strip()
 
     # 严格判断输出
