@@ -1797,6 +1797,70 @@ function roundRect(ctx, x, y, width, height, radius) {
   ctx.closePath();
 }
 
+const landingSpotlightRadius = 260;
+
+function LandingRevealLayer({ image, cursorX, cursorY }) {
+  const canvasRef = useRef(null);
+  const revealRef = useRef(null);
+
+  useEffect(() => {
+    function resizeCanvas() {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.ceil(window.innerWidth * ratio);
+      canvas.height = Math.ceil(window.innerHeight * ratio);
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
+
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
+    return () => window.removeEventListener("resize", resizeCanvas);
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const reveal = revealRef.current;
+    if (!canvas || !reveal) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+    if (cursorX > -100 && cursorY > -100) {
+      const gradient = ctx.createRadialGradient(cursorX, cursorY, 0, cursorX, cursorY, landingSpotlightRadius);
+      gradient.addColorStop(0, "rgba(255,255,255,1)");
+      gradient.addColorStop(0.4, "rgba(255,255,255,1)");
+      gradient.addColorStop(0.6, "rgba(255,255,255,0.75)");
+      gradient.addColorStop(0.75, "rgba(255,255,255,0.4)");
+      gradient.addColorStop(0.88, "rgba(255,255,255,0.12)");
+      gradient.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(cursorX, cursorY, landingSpotlightRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const mask = `url(${canvas.toDataURL()})`;
+    reveal.style.maskImage = mask;
+    reveal.style.webkitMaskImage = mask;
+  }, [cursorX, cursorY]);
+
+  return (
+    <>
+      <canvas ref={canvasRef} className="landing-reveal-canvas" aria-hidden="true" />
+      <div
+        ref={revealRef}
+        className="landing-reveal-layer"
+        aria-hidden="true"
+        style={{ backgroundImage: `url(${image})` }}
+      />
+    </>
+  );
+}
+
 function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
   const [showLogin, setShowLogin] = useState(false);
   const [loginKind, setLoginKind] = useState("user");
@@ -1808,6 +1872,10 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
   const [loading, setLoading] = useState(false);
   const landingRef = useRef(null);
   const loginRef = useRef(null);
+  const landingMouse = useRef({ x: -999, y: -999 });
+  const landingSmooth = useRef({ x: -999, y: -999 });
+  const landingRafRef = useRef(0);
+  const [landingCursor, setLandingCursor] = useState({ x: -999, y: -999 });
   const [focusedField, setFocusedField] = useState("");
   const isAdmin = loginKind === "admin";
   const authMode = isAdmin ? "admin" : mode === "register" ? "register" : "login";
@@ -1822,6 +1890,20 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
     if (isAdmin) { setMode("login"); setUsername("admin"); setPassword("admin123"); }
     else { setUsername("demo"); setPassword("demo123"); }
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (showLogin) return undefined;
+
+    function animateCursor() {
+      landingSmooth.current.x += (landingMouse.current.x - landingSmooth.current.x) * 0.1;
+      landingSmooth.current.y += (landingMouse.current.y - landingSmooth.current.y) * 0.1;
+      setLandingCursor({ x: landingSmooth.current.x, y: landingSmooth.current.y });
+      landingRafRef.current = requestAnimationFrame(animateCursor);
+    }
+
+    landingRafRef.current = requestAnimationFrame(animateCursor);
+    return () => cancelAnimationFrame(landingRafRef.current);
+  }, [showLogin]);
 
   function chooseAuthMode(nextMode) {
     setError("");
@@ -1854,15 +1936,21 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
     const rect = element.getBoundingClientRect();
     const x = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
     const y = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
+    landingMouse.current = { x: event.clientX, y: event.clientY };
     element.style.setProperty("--mx", x.toFixed(3));
     element.style.setProperty("--my", y.toFixed(3));
+    element.style.setProperty("--mouse-x", `${((event.clientX - rect.left) / rect.width) * 100}%`);
+    element.style.setProperty("--mouse-y", `${((event.clientY - rect.top) / rect.height) * 100}%`);
   }
 
   function resetLandingPointer() {
     const element = landingRef.current;
+    landingMouse.current = { x: -999, y: -999 };
     if (!element) return;
     element.style.setProperty("--mx", "0");
     element.style.setProperty("--my", "0");
+    element.style.setProperty("--mouse-x", "50%");
+    element.style.setProperty("--mouse-y", "50%");
   }
 
   function handleLoginPointerMove(event) {
@@ -1885,7 +1973,8 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
   if (!showLogin) {
     return (
       <main className="landing-shell" ref={landingRef} onPointerMove={handleLandingPointerMove} onPointerLeave={resetLandingPointer}>
-        <div className="landing-image-bg" />
+        <div className="landing-image-bg hero-zoom" />
+        <LandingRevealLayer image="/images/workspace-tcm-vivid-bg.png" cursorX={landingCursor.x} cursorY={landingCursor.y} />
         <div className="landing-paper" />
         <div className="landing-mist" aria-hidden="true">
           <span className="mist mist-a" />
@@ -1906,9 +1995,14 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
         </div>
         <button className="landing-login-button" type="button" onClick={() => setShowLogin(true)}>{"登录"}</button>
         <section className="landing-hero" aria-label="中医图谱入口">
-          <p>{"药图"}</p>
-          <h1>{"中医图谱"}</h1>
-          <strong>{"方药知识 · 图谱证据 · 智能问答"}</strong>
+          <p className="hero-anim hero-fade" style={{ animationDelay: "0.18s" }}>{"药图"}</p>
+          <h1>
+            <span className="hero-anim hero-reveal" style={{ animationDelay: "0.25s" }}>{"药图"}</span>
+          </h1>
+          <strong className="hero-anim hero-fade" style={{ animationDelay: "0.68s" }}>{"方药知识 · 图谱证据 · 智能问答"}</strong>
+        </section>
+        <section className="landing-copy-left hero-anim hero-fade" style={{ animationDelay: "0.78s" }}>
+          {"每一味药材都藏着性味、归经、功效与方剂之间的线索，沿着图谱脉络逐层显影。"}
         </section>
       </main>
     );
