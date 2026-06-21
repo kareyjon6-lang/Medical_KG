@@ -1483,7 +1483,7 @@ function GraphPanel(props) {
   const [graphSize, setGraphSize] = useState({ width: 1, height: 1 });
   useEffect(() => { function measureScene() { const rect = sceneRef.current?.getBoundingClientRect(); if (!rect) return; setGraphSize({ width: Math.max(320, Math.floor(rect.width)), height: Math.max(360, Math.floor(rect.height)) }); } measureScene(); const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measureScene) : null; if (observer && sceneRef.current) observer.observe(sceneRef.current); window.addEventListener("resize", measureScene); return () => { observer?.disconnect(); window.removeEventListener("resize", measureScene); }; }, []);
   useEffect(() => { const timers = [700, 1600, 2800].map((delay) => window.setTimeout(() => centerGraphCamera(graphRef, 720), delay)); return () => { timers.forEach(window.clearTimeout); }; }, [graphData.nodes.length, graphData.links.length, graphFocus, graphRef]);
-  return <div className="graph-layout"><section className="graph-toolbar"><div className="graph-meta"><span className="entity-chip Formula">{graphFocus}</span><strong>{rawGraph.nodes.length} {"节点"}</strong><strong>{rawGraph.edges.length} {"关系"}</strong>{loading && <strong>{"加载中"}</strong>}</div><div className="graph-controls"><label>{"深度"}<select value={graphDepth} onChange={(event) => setGraphDepth(Number(event.target.value))}><option value={1}>{"1 跳"}</option><option value={2}>{"2 跳"}</option></select></label><span className="graph-depth-help" title="1跳仅显示中心实体的直接关系；2跳会继续扩展到邻居的邻居。">{"1跳=直接关系，2跳=再扩展一层"}</span></div></section><section className="graph-scene" ref={sceneRef}><div className="relation-filters">{relationFilters.map((label) => <button key={label} type="button" className={activeRelations.includes(label) ? "relation-filter active" : "relation-filter"} onClick={() => switchRelation(label)}>{relationLabel(label)}</button>)}</div>{hasWebGL ? <ThreeKnowledgeGraph graphData={graphData} graphFocus={graphFocus} graphSize={graphSize} onSelect={(node) => { setSelectedNode(node); setGraphFocus(node.name); }} /> : <KnowledgeGraphFallback graph={{ nodes: graphData.nodes, edges: graphData.links }} focus={graphFocus} onSelect={(node) => { setSelectedNode(node); setGraphFocus(node.name); }} />}<div className="graph-legend">{["Formula", "Herb", "Symptom", "Effect", "Source"].map((label) => <span key={label}><i style={{ background: entityColor(label) }} />{entityLabel(label)}</span>)}</div></section><aside className="graph-inspector"><p className="eyebrow">{"实体详情"}</p>{selectedNode ? <><h2>{selectedNode.name}</h2><span className={["entity-chip", selectedNode.label].join(" ")}>{entityLabel(selectedNode.label)}</span><dl>{Object.entries(selectedNode.properties || {}).map(([key, value]) => <div key={key}><dt>{propertyLabel(key)}</dt><dd>{String(value)}</dd></div>)}{!Object.keys(selectedNode.properties || {}).length && <div><dt>{"提示"}</dt><dd>{"当前实体暂无更多属性，可继续扩展关联节点。"}</dd></div>}</dl><Link className="primary-link" href={"/assistant?q=" + encodeURIComponent(selectedNode.name)}>{"在问答中解释"}</Link><Link className="secondary-link" href={"/search?q=" + encodeURIComponent(selectedNode.name)}>{"返回搜索结果"}</Link></> : <p className="empty-note">{"点击图谱节点查看详情"}</p>}<div className="graph-state"><span><Layers3 size={14} />{"稳定布局"}</span><span><Activity size={14} />{"可拖动旋转"}</span><span><Network size={14} />{"关系可筛选"}</span></div></aside></div>;
+  return <div className="graph-layout"><section className="graph-toolbar"><div className="graph-meta"><span className="entity-chip Formula">{graphFocus}</span><strong>{rawGraph.nodes.length} {"节点"}</strong><strong>{rawGraph.edges.length} {"关系"}</strong>{loading && <strong>{"加载中"}</strong>}</div><div className="graph-controls"><label>{"深度"}<select value={graphDepth} onChange={(event) => setGraphDepth(Number(event.target.value))}><option value={1}>{"1 跳"}</option><option value={2}>{"2 跳"}</option></select></label></div></section><section className="graph-scene" ref={sceneRef}><div className="relation-filters">{relationFilters.map((label) => <button key={label} type="button" className={activeRelations.includes(label) ? "relation-filter active" : "relation-filter"} onClick={() => switchRelation(label)}>{relationLabel(label)}</button>)}</div>{hasWebGL ? <ThreeKnowledgeGraph graphData={graphData} graphFocus={graphFocus} graphSize={graphSize} onSelect={(node) => { setSelectedNode(node); setGraphFocus(node.name); }} /> : <KnowledgeGraphFallback graph={{ nodes: graphData.nodes, edges: graphData.links }} focus={graphFocus} onSelect={(node) => { setSelectedNode(node); setGraphFocus(node.name); }} />}<div className="graph-legend">{["Formula", "Herb", "Symptom", "Effect", "Source"].map((label) => <span key={label}><i style={{ background: entityColor(label) }} />{entityLabel(label)}</span>)}</div></section><aside className="graph-inspector"><p className="eyebrow">{"实体详情"}</p>{selectedNode ? <><h2>{selectedNode.name}</h2><span className={["entity-chip", selectedNode.label].join(" ")}>{entityLabel(selectedNode.label)}</span><dl>{Object.entries(selectedNode.properties || {}).map(([key, value]) => <div key={key}><dt>{propertyLabel(key)}</dt><dd>{String(value)}</dd></div>)}{!Object.keys(selectedNode.properties || {}).length && <div><dt>{"提示"}</dt><dd>{"当前实体暂无更多属性，可继续扩展关联节点。"}</dd></div>}</dl><Link className="primary-link" href={"/assistant?q=" + encodeURIComponent(selectedNode.name)}>{"在问答中解释"}</Link><Link className="secondary-link" href={"/search?q=" + encodeURIComponent(selectedNode.name)}>{"返回搜索结果"}</Link></> : <p className="empty-note">{"点击图谱节点查看详情"}</p>}<div className="graph-state"><span><Layers3 size={14} />{"稳定布局"}</span><span><Activity size={14} />{"可拖动旋转"}</span><span><Network size={14} />{"关系可筛选"}</span></div></aside></div>;
 }
 
 function ThreeKnowledgeGraph({ graphData, graphFocus, graphSize, resetKey, onSelect }) {
@@ -2214,9 +2214,11 @@ function KnowledgeGraphPreview({ graph, focus, draft, hasWebGL }) {
   const sceneRef = useRef(null);
   const [graphSize, setGraphSize] = useState({ width: 1, height: 1 });
   const [selectedNode, setSelectedNode] = useState(null);
-  const [previewDepth, setPreviewDepth] = useState(2);
-  const previewGraph = useMemo(() => sliceGraphByDepth(graph, focus, previewDepth), [graph, focus, previewDepth]);
-  const previewData = useMemo(() => toRenderableGraph(previewGraph, focus), [previewGraph, focus]);
+  const [previewDepth, setPreviewDepth] = useState(1);
+  const [depthGraph, setDepthGraph] = useState(null);
+  const localDepthGraph = useMemo(() => filterGraphByDepth(graph, focus, previewDepth), [graph, focus, previewDepth]);
+  const displayGraph = depthGraph?.nodes?.length ? depthGraph : localDepthGraph.nodes.length ? localDepthGraph : graph;
+  const previewData = useMemo(() => toRenderableGraph(displayGraph, focus), [displayGraph, focus]);
   useEffect(() => {
     function measureScene() {
       const rect = sceneRef.current?.getBoundingClientRect();
@@ -2230,11 +2232,20 @@ function KnowledgeGraphPreview({ graph, focus, draft, hasWebGL }) {
     return () => { observer?.disconnect(); window.removeEventListener("resize", measureScene); };
   }, []);
   useEffect(() => {
-    if (!selectedNode) return;
-    if (!previewGraph.nodes.some((node) => node.id === selectedNode.id)) {
-      setSelectedNode(null);
-    }
-  }, [previewGraph, selectedNode]);
+    let cancelled = false;
+    const cleanFocus = String(focus || "").trim();
+    setSelectedNode(null);
+    setDepthGraph(null);
+    if (!cleanFocus) return () => { cancelled = true; };
+    fetchKnowledgeGraph(cleanFocus, { depth: previewDepth, limit: 80 })
+      .then((nextGraph) => {
+        if (!cancelled) setDepthGraph(nextGraph?.nodes?.length ? nextGraph : null);
+      })
+      .catch(() => {
+        if (!cancelled) setDepthGraph(null);
+      });
+    return () => { cancelled = true; };
+  }, [focus, graph, previewDepth]);
   const hasGraph = previewData.nodes.length > 0;
   const title = focus || "等待识别";
   return (
@@ -2242,17 +2253,14 @@ function KnowledgeGraphPreview({ graph, focus, draft, hasWebGL }) {
       <div className="knowledge-zone-title">
         <div><p className="eyebrow">{"3D 图谱预览"}</p><h3>{title}</h3></div>
         <div className="knowledge-preview-toolbar">
-          <label className="knowledge-preview-controls">
+          <div className="knowledge-preview-controls" aria-label="图谱深度切换">
             <span>{"深度"}</span>
-            <select value={previewDepth} onChange={(event) => setPreviewDepth(Number(event.target.value))}>
-              <option value={1}>{"1 跳"}</option>
-              <option value={2}>{"2 跳"}</option>
-            </select>
-          </label>
+            <button type="button" className={previewDepth === 1 ? "active" : ""} onClick={() => setPreviewDepth(1)}>{"1跳"}</button>
+            <button type="button" className={previewDepth === 2 ? "active" : ""} onClick={() => setPreviewDepth(2)}>{"2跳"}</button>
+          </div>
           <span className="knowledge-preview-count">{hasGraph ? `${previewData.nodes.length} 节点 · ${previewData.links.length} 关系` : "空状态"}</span>
         </div>
       </div>
-      <span className="graph-depth-help knowledge-preview-depth-help" title="1跳仅显示中心实体的直接关系；2跳会继续扩展到邻居的邻居。">{"1跳=直接关系，2跳=再扩展一层"}</span>
       <div className="knowledge-preview-scene" ref={sceneRef}>
         {hasGraph ? (
           hasWebGL ? (
@@ -2357,13 +2365,6 @@ function buildPreviewGraphFromDraft(payload) {
   const edges = [];
   const known = new Set([centerId]);
   draft.relations.forEach((relation) => {
-    const subjectLabel = relation.subject_type || label;
-    const subjectName = relation.subject || draft.herb.name || "";
-    const subjectId = `${subjectLabel}:${subjectName}`;
-    if (subjectName && !known.has(subjectId)) {
-      known.add(subjectId);
-      nodes.push({ id: subjectId, name: subjectName, label: subjectLabel, properties: subjectId === centerId ? Object.fromEntries(Object.entries(draft.herb).filter(([, value]) => value)) : {} });
-    }
     if (!relation.object) return;
     const objectLabel = relation.object_type || "Entity";
     const objectId = `${objectLabel}:${relation.object}`;
@@ -2371,12 +2372,12 @@ function buildPreviewGraphFromDraft(payload) {
       known.add(objectId);
       nodes.push({ id: objectId, name: relation.object, label: objectLabel, properties: {} });
     }
-    edges.push({ id: `${subjectId}-${relation.relation}-${objectId}`, source: subjectId, target: objectId, label: relation.relation });
+    edges.push({ id: `${centerId}-${relation.relation}-${objectId}`, source: centerId, target: objectId, label: relation.relation });
   });
   return { nodes, edges };
 }
 
-function sliceGraphByDepth(graph, focus, depth = 2) {
+function filterGraphByDepth(graph, focus, depth = 1) {
   const rawNodes = Array.isArray(graph?.nodes) ? graph.nodes : [];
   const rawEdges = Array.isArray(graph?.edges) ? graph.edges : [];
   if (!rawNodes.length) return { nodes: [], edges: [] };
@@ -2387,10 +2388,13 @@ function sliceGraphByDepth(graph, focus, depth = 2) {
   const maxDepth = Math.max(1, Math.min(Number(depth) || 1, 2));
   const adjacency = new Map(rawNodes.map((node) => [node.id, new Set()]));
   rawEdges.forEach((edge) => {
-    if (!adjacency.has(edge.source)) adjacency.set(edge.source, new Set());
-    if (!adjacency.has(edge.target)) adjacency.set(edge.target, new Set());
-    adjacency.get(edge.source).add(edge.target);
-    adjacency.get(edge.target).add(edge.source);
+    const sourceId = edgeEndpointId(edge.source);
+    const targetId = edgeEndpointId(edge.target);
+    if (!sourceId || !targetId) return;
+    if (!adjacency.has(sourceId)) adjacency.set(sourceId, new Set());
+    if (!adjacency.has(targetId)) adjacency.set(targetId, new Set());
+    adjacency.get(sourceId).add(targetId);
+    adjacency.get(targetId).add(sourceId);
   });
 
   const distances = new Map([[centerNode.id, 0]]);
@@ -2407,10 +2411,9 @@ function sliceGraphByDepth(graph, focus, depth = 2) {
   }
 
   const visibleIds = new Set(distances.keys());
-  return {
-    nodes: rawNodes.filter((node) => visibleIds.has(node.id)),
-    edges: rawEdges.filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target)),
-  };
+  const nodes = rawNodes.filter((node) => visibleIds.has(node.id));
+  const edges = rawEdges.filter((edge) => visibleIds.has(edgeEndpointId(edge.source)) && visibleIds.has(edgeEndpointId(edge.target)));
+  return nodes.length ? { nodes, edges } : { nodes: rawNodes, edges: rawEdges };
 }
 
 function toRenderableGraph(graph, focus) {

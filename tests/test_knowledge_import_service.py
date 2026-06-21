@@ -153,23 +153,6 @@ def test_extract_real_formula_style_text_keeps_rich_relationships_without_llm():
     assert [relation["object"] for relation in relations if relation["relation"] == "FROM_SOURCE"] == ["通俗伤寒论"]
 
 
-def test_build_preview_graph_preserves_non_center_subject_relationships():
-    graph = build_preview_graph(
-        {
-            "herb": {"name": "阿胶鸡子黄汤", "label": "Formula"},
-            "relations": [
-                {"subject": "阿胶鸡子黄汤", "subject_type": "Formula", "relation": "HAS_INGREDIENT", "object": "阿胶", "object_type": "Herb"},
-                {"subject": "阿胶", "subject_type": "Herb", "relation": "HAS_EFFECT", "object": "补血", "object_type": "Effect"},
-            ],
-        }
-    )
-
-    assert any(node["id"] == "Formula:阿胶鸡子黄汤" for node in graph["nodes"])
-    assert any(node["id"] == "Herb:阿胶" for node in graph["nodes"])
-    assert any(edge["id"] == "Formula:阿胶鸡子黄汤-HAS_INGREDIENT-Herb:阿胶" for edge in graph["edges"])
-    assert any(edge["id"] == "Herb:阿胶-HAS_EFFECT-Effect:补血" for edge in graph["edges"])
-
-
 def test_delete_formula_from_neo4j_uses_exact_formula_or_herb_match(monkeypatch):
     class FakeNeo4j:
         def __init__(self):

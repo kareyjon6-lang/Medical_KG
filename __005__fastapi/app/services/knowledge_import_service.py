@@ -155,28 +155,16 @@ def build_preview_graph(payload: Dict[str, Any]) -> Dict[str, List[Dict[str, Any
     }
     edges_by_id: Dict[str, Dict[str, Any]] = {}
     for relation in normalized["relations"]:
-        subject_name = _clean_text(relation.get("subject") or herb["name"])
-        subject_type = _clean_label(relation.get("subject_type") or subject_label)
-        subject_id = f"{subject_type}:{subject_name}"
-        nodes_by_id.setdefault(
-            subject_id,
-            {
-                "id": subject_id,
-                "name": subject_name,
-                "label": subject_type,
-                "properties": _herb_props(herb) if subject_id == center_id else {},
-            },
-        )
         object_label = _clean_label(relation.get("object_type") or "Entity")
         object_id = f"{object_label}:{relation['object']}"
         nodes_by_id.setdefault(
             object_id,
             {"id": object_id, "name": relation["object"], "label": object_label, "properties": {}},
         )
-        edge_id = f"{subject_id}-{relation['relation']}-{object_id}"
+        edge_id = f"{center_id}-{relation['relation']}-{object_id}"
         edges_by_id.setdefault(
             edge_id,
-            {"id": edge_id, "source": subject_id, "target": object_id, "label": relation["relation"]},
+            {"id": edge_id, "source": center_id, "target": object_id, "label": relation["relation"]},
         )
     return {"nodes": list(nodes_by_id.values()), "edges": list(edges_by_id.values())}
 

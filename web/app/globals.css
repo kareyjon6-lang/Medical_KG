@@ -7484,19 +7484,23 @@ dd {
   font-weight: 900 !important;
 }
 
-.knowledge-preview-controls select {
+.knowledge-preview-controls button {
+  min-width: 52px !important;
   min-height: 32px !important;
   border: 1px solid rgba(20, 61, 43, 0.18) !important;
   border-radius: 10px !important;
   padding: 0 10px !important;
-  color: var(--ink) !important;
+  color: rgba(20, 61, 43, 0.72) !important;
   background: rgba(255, 250, 240, 0.92) !important;
   font-weight: 900 !important;
 }
 
-.knowledge-preview-depth-help {
-  margin-top: -2px !important;
+.knowledge-preview-controls button.active {
+  color: var(--paper-strong) !important;
+  background: var(--ink) !important;
+  border-color: var(--ink) !important;
 }
+
 
 .knowledge-preview-scene {
   position: relative !important;
