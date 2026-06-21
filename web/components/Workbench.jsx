@@ -608,7 +608,7 @@ export default function Workbench({ initialView = "assistant" }) {
       await refreshAdminUsers();
       setAdminStatus("用户已创建");
     } catch (error) {
-      setAdminStatus("创建失败：用户名可能已存在或密码过短");
+      setAdminStatus(error?.message ? `创建失败：${error.message}` : "创建失败，请检查输入后重试");
     }
   }
 
@@ -1865,8 +1865,8 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
   const [showLogin, setShowLogin] = useState(false);
   const [loginKind, setLoginKind] = useState("user");
   const [mode, setMode] = useState("login");
-  const [username, setUsername] = useState("demo");
-  const [password, setPassword] = useState("demo123");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1887,8 +1887,9 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
   }, [savedSession]);
 
   useEffect(() => {
-    if (isAdmin) { setMode("login"); setUsername("admin"); setPassword("admin123"); }
-    else { setUsername("demo"); setPassword("demo123"); }
+    if (isAdmin) setMode("login");
+    setUsername("");
+    setPassword("");
   }, [isAdmin]);
 
   useEffect(() => {
@@ -1910,14 +1911,14 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
     if (nextMode === "admin") {
       setLoginKind("admin");
       setMode("login");
-      setUsername("admin");
-      setPassword("admin123");
+      setUsername("");
+      setPassword("");
       return;
     }
     setLoginKind("user");
     setMode(nextMode === "register" ? "register" : "login");
-    setUsername("demo");
-    setPassword("demo123");
+    setUsername("");
+    setPassword("");
   }
 
   async function submit(event) {
@@ -1926,7 +1927,8 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
       const data = isAdmin ? await adminLogin(username, password) : mode === "login" ? await login(username, password) : await register(username, password);
       await onAuthed({ token: data.token, user: data.user });
     } catch (err) {
-      setError(isAdmin ? "管理员登录失败，请确认账号具备管理员权限。" : mode === "login" ? "登录失败，请检查账号密码。" : "注册失败，用户名可能已存在。");
+      const fallback = isAdmin ? "管理员登录失败，请检查输入后重试。" : mode === "login" ? "登录失败，请检查账号密码后重试。" : "注册失败，请检查输入后重试。";
+      setError(err?.message || fallback);
     } finally { setLoading(false); }
   }
 
@@ -2106,7 +2108,7 @@ function AdminPanel({
       {activeTab === "users" && (
         <div className="admin-users-workspace">
           <section className="admin-create"><div className="panel-heading"><div><p className="eyebrow">{"创建账号"}</p><h2>{"新增用户"}</h2></div><UserPlus size={22} /></div><form className="admin-form" onSubmit={onCreate}><label><span>{"用户名"}</span><input value={form.username} onChange={(event) => setForm((item) => ({ ...item, username: event.target.value }))} /></label><label><span>{"初始密码"}</span><input type="password" value={form.password} onChange={(event) => setForm((item) => ({ ...item, password: event.target.value }))} /></label><label><span>{"角色"}</span><select value={form.role} onChange={(event) => setForm((item) => ({ ...item, role: event.target.value }))}><option value="user">{"普通用户"}</option><option value="admin">{"管理员"}</option></select></label><button type="submit">{"创建账号"}</button></form><p className="admin-status">{status}</p></section>
-          <section className="admin-users"><div className="panel-heading"><div><p className="eyebrow">{"账号列表"}</p><h2>{"用户列表"}</h2></div><button type="button" className="mode-switch compact" onClick={onRefresh}>{"刷新"}</button></div><div className="user-table">{users.map((user) => <article key={user.id} className="user-row"><div><strong>{user.username}</strong><span>{user.role === "admin" ? "管理员" : "普通用户"} {" · "}{user.message_count || 0}{" 条消息"}</span></div><small>{user.last_login_at ? "最近登录 " + user.last_login_at : "尚未登录"}</small><button type="button" disabled={user.id === currentUser?.id} onClick={() => onDelete(user.id)}>{"删除"}</button></article>)}{!users.length && <p className="empty-note">{"暂无用户记录"}</p>}</div></section>
+          <section className="admin-users"><div className="panel-heading"><div><p className="eyebrow">{"账号列表"}</p><h2 className="admin-users-title">{"用户列表"}</h2></div><button type="button" className="mode-switch compact" onClick={onRefresh}>{"刷新"}</button></div><div className="user-table">{users.map((user) => <article key={user.id} className="user-row"><div><strong>{user.username}</strong><span>{user.role === "admin" ? "管理员" : "普通用户"} {" · "}{user.message_count || 0}{" 条消息"}</span></div><small>{user.last_login_at ? "最近登录 " + formatShanghaiDateTime(user.last_login_at) : "尚未登录"}</small><button type="button" disabled={user.id === currentUser?.id} onClick={() => onDelete(user.id)}>{"删除"}</button></article>)}{!users.length && <p className="empty-note">{"暂无用户记录"}</p>}</div></section>
         </div>
       )}
       {activeTab === "knowledge" && (
@@ -2212,7 +2214,9 @@ function KnowledgeGraphPreview({ graph, focus, draft, hasWebGL }) {
   const sceneRef = useRef(null);
   const [graphSize, setGraphSize] = useState({ width: 1, height: 1 });
   const [selectedNode, setSelectedNode] = useState(null);
-  const previewData = useMemo(() => toRenderableGraph(graph, focus), [graph, focus]);
+  const [previewDepth, setPreviewDepth] = useState(2);
+  const previewGraph = useMemo(() => sliceGraphByDepth(graph, focus, previewDepth), [graph, focus, previewDepth]);
+  const previewData = useMemo(() => toRenderableGraph(previewGraph, focus), [previewGraph, focus]);
   useEffect(() => {
     function measureScene() {
       const rect = sceneRef.current?.getBoundingClientRect();
@@ -2225,14 +2229,30 @@ function KnowledgeGraphPreview({ graph, focus, draft, hasWebGL }) {
     window.addEventListener("resize", measureScene);
     return () => { observer?.disconnect(); window.removeEventListener("resize", measureScene); };
   }, []);
+  useEffect(() => {
+    if (!selectedNode) return;
+    if (!previewGraph.nodes.some((node) => node.id === selectedNode.id)) {
+      setSelectedNode(null);
+    }
+  }, [previewGraph, selectedNode]);
   const hasGraph = previewData.nodes.length > 0;
   const title = focus || "等待识别";
   return (
     <section className="knowledge-preview-zone">
       <div className="knowledge-zone-title">
         <div><p className="eyebrow">{"3D 图谱预览"}</p><h3>{title}</h3></div>
-        <span className="knowledge-preview-count">{hasGraph ? `${previewData.nodes.length} 节点 · ${previewData.links.length} 关系` : "空状态"}</span>
+        <div className="knowledge-preview-toolbar">
+          <label className="knowledge-preview-controls">
+            <span>{"深度"}</span>
+            <select value={previewDepth} onChange={(event) => setPreviewDepth(Number(event.target.value))}>
+              <option value={1}>{"1 跳"}</option>
+              <option value={2}>{"2 跳"}</option>
+            </select>
+          </label>
+          <span className="knowledge-preview-count">{hasGraph ? `${previewData.nodes.length} 节点 · ${previewData.links.length} 关系` : "空状态"}</span>
+        </div>
       </div>
+      <span className="graph-depth-help knowledge-preview-depth-help" title="1跳仅显示中心实体的直接关系；2跳会继续扩展到邻居的邻居。">{"1跳=直接关系，2跳=再扩展一层"}</span>
       <div className="knowledge-preview-scene" ref={sceneRef}>
         {hasGraph ? (
           hasWebGL ? (
@@ -2337,6 +2357,13 @@ function buildPreviewGraphFromDraft(payload) {
   const edges = [];
   const known = new Set([centerId]);
   draft.relations.forEach((relation) => {
+    const subjectLabel = relation.subject_type || label;
+    const subjectName = relation.subject || draft.herb.name || "";
+    const subjectId = `${subjectLabel}:${subjectName}`;
+    if (subjectName && !known.has(subjectId)) {
+      known.add(subjectId);
+      nodes.push({ id: subjectId, name: subjectName, label: subjectLabel, properties: subjectId === centerId ? Object.fromEntries(Object.entries(draft.herb).filter(([, value]) => value)) : {} });
+    }
     if (!relation.object) return;
     const objectLabel = relation.object_type || "Entity";
     const objectId = `${objectLabel}:${relation.object}`;
@@ -2344,9 +2371,46 @@ function buildPreviewGraphFromDraft(payload) {
       known.add(objectId);
       nodes.push({ id: objectId, name: relation.object, label: objectLabel, properties: {} });
     }
-    edges.push({ id: `${centerId}-${relation.relation}-${objectId}`, source: centerId, target: objectId, label: relation.relation });
+    edges.push({ id: `${subjectId}-${relation.relation}-${objectId}`, source: subjectId, target: objectId, label: relation.relation });
   });
   return { nodes, edges };
+}
+
+function sliceGraphByDepth(graph, focus, depth = 2) {
+  const rawNodes = Array.isArray(graph?.nodes) ? graph.nodes : [];
+  const rawEdges = Array.isArray(graph?.edges) ? graph.edges : [];
+  if (!rawNodes.length) return { nodes: [], edges: [] };
+
+  const centerNode = rawNodes.find((node) => node.name === focus) || rawNodes[0];
+  if (!centerNode?.id) return { nodes: rawNodes, edges: rawEdges };
+
+  const maxDepth = Math.max(1, Math.min(Number(depth) || 1, 2));
+  const adjacency = new Map(rawNodes.map((node) => [node.id, new Set()]));
+  rawEdges.forEach((edge) => {
+    if (!adjacency.has(edge.source)) adjacency.set(edge.source, new Set());
+    if (!adjacency.has(edge.target)) adjacency.set(edge.target, new Set());
+    adjacency.get(edge.source).add(edge.target);
+    adjacency.get(edge.target).add(edge.source);
+  });
+
+  const distances = new Map([[centerNode.id, 0]]);
+  const queue = [centerNode.id];
+  while (queue.length) {
+    const nodeId = queue.shift();
+    const nextDepth = distances.get(nodeId) + 1;
+    if (nextDepth > maxDepth) continue;
+    (adjacency.get(nodeId) || []).forEach((neighborId) => {
+      if (distances.has(neighborId)) return;
+      distances.set(neighborId, nextDepth);
+      queue.push(neighborId);
+    });
+  }
+
+  const visibleIds = new Set(distances.keys());
+  return {
+    nodes: rawNodes.filter((node) => visibleIds.has(node.id)),
+    edges: rawEdges.filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target)),
+  };
 }
 
 function toRenderableGraph(graph, focus) {

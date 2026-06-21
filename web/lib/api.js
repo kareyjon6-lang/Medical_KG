@@ -95,7 +95,7 @@ export async function authRequest(path, username, password) {
     body: JSON.stringify({ username, password }),
   });
   if (!response.ok) {
-    throw new Error(`Auth request failed with ${response.status}`);
+    throw new Error(await readAuthErrorMessage(response, path, `Auth request failed with ${response.status}`));
   }
   return response.json();
 }
@@ -359,7 +359,7 @@ export async function createAdminUser(token, username, password, role = "user") 
     body: JSON.stringify({ username, password, role }),
   });
   if (!response.ok) {
-    throw new Error(`Create admin user request failed with ${response.status}`);
+    throw new Error(await readAuthErrorMessage(response, "/api/admin/users", `Create admin user request failed with ${response.status}`));
   }
   return response.json();
 }
@@ -449,13 +449,83 @@ export async function fetchKnowledgeImports(token, limit = 50) {
 async function readErrorMessage(response, fallback) {
   try {
     const payload = await response.json();
-    if (typeof payload.detail === "string") return payload.detail;
-    if (payload.detail?.message) return payload.detail.message;
-    if (payload.message) return payload.message;
+    return normalizeApiErrorMessage(payload, fallback);
   } catch (error) {
     return fallback;
   }
+}
+
+
+async function readAuthErrorMessage(response, path, fallback) {
+  try {
+    const payload = await response.json();
+    return normalizeAuthErrorMessage(payload, path, fallback);
+  } catch (error) {
+    return fallback;
+  }
+}
+
+
+function normalizeApiErrorMessage(payload, fallback) {
+  const detail = payload?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) return detail.map(formatValidationIssue).filter(Boolean).join("；") || fallback;
+  if (detail?.message) return detail.message;
+  if (payload?.message) return payload.message;
   return fallback;
+}
+
+
+function normalizeAuthErrorMessage(payload, path, fallback) {
+  const rawMessage = normalizeApiErrorMessage(payload, fallback);
+  const detail = payload?.detail;
+
+  if (Array.isArray(detail)) {
+    const message = detail.map(formatValidationIssue).filter(Boolean).join("；");
+    return message || rawMessage;
+  }
+
+  if (typeof rawMessage !== "string") return fallback;
+
+  if (rawMessage === "Invalid username or password.") {
+    return path === "/api/auth/admin/login" ? "管理员账号或密码错误。" : "账号或密码错误。";
+  }
+  if (rawMessage === "Administrator account required.") {
+    return "当前账号不是管理员账号。";
+  }
+  if (rawMessage === "Username must be at least 2 characters.") {
+    return "用户名至少需要 2 位。";
+  }
+  if (rawMessage === "Password must be at least 6 characters.") {
+    return "密码至少需要 6 位。";
+  }
+
+  const lowered = rawMessage.toLowerCase();
+  if (
+    lowered.includes("duplicate key value") ||
+    lowered.includes("already exists") ||
+    lowered.includes("users_username_key") ||
+    lowered.includes("unique constraint")
+  ) {
+    return "用户名已存在。";
+  }
+
+  return rawMessage;
+}
+
+
+function formatValidationIssue(issue) {
+  const location = Array.isArray(issue?.loc) ? issue.loc.join(".") : "";
+  const message = String(issue?.msg || "");
+  const minimum = issue?.ctx?.min_length;
+
+  if (location.includes("password") && minimum) {
+    return `密码至少需要 ${minimum} 位。`;
+  }
+  if (location.includes("username") && minimum) {
+    return `用户名至少需要 ${minimum} 位。`;
+  }
+  return message;
 }
 
 

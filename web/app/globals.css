@@ -7319,6 +7319,10 @@ dd {
   line-height: 1.05 !important;
 }
 
+.admin-users-title {
+  white-space: nowrap !important;
+}
+
 .admin-scroll-layout .admin-form {
   display: grid !important;
   grid-template-columns: 1fr 1fr 180px 160px !important;
@@ -7463,6 +7467,35 @@ dd {
   color: rgba(20, 61, 43, 0.66) !important;
   font-size: 13px !important;
   font-weight: 900 !important;
+}
+
+.knowledge-preview-toolbar {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.knowledge-preview-controls {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  color: rgba(20, 61, 43, 0.78) !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+}
+
+.knowledge-preview-controls select {
+  min-height: 32px !important;
+  border: 1px solid rgba(20, 61, 43, 0.18) !important;
+  border-radius: 10px !important;
+  padding: 0 10px !important;
+  color: var(--ink) !important;
+  background: rgba(255, 250, 240, 0.92) !important;
+  font-weight: 900 !important;
+}
+
+.knowledge-preview-depth-help {
+  margin-top: -2px !important;
 }
 
 .knowledge-preview-scene {
