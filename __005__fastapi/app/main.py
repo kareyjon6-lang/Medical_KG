@@ -348,7 +348,7 @@ async def admin_knowledge_imports(authorization: str = Header(default=""), limit
 @app.get("/api/search")
 async def search(
     q: str = Query(default=""),
-    limit: int = Query(200, ge=1, le=1000),
+    limit: int = Query(3000, ge=1, le=3000),
     label: str = Query(default=""),
     source: str = Query(default=""),
     effects: str = Query(default=""),

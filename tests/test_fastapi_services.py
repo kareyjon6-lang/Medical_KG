@@ -31,8 +31,8 @@ def test_read_only_guard_rejects_write_or_multi_statement_queries(query):
 
 
 class FakeNeo4j:
-    def __init__(self, records):
-        self.records = records
+    def __init__(self, records=None):
+        self.records = records or []
         self.calls = []
 
     def run_cypher(self, query, parameters=None):
@@ -101,6 +101,24 @@ def test_search_results_can_filter_by_label():
     assert parameters == {"query": "", "labels": "Formula", "source": "", "effects": "", "limit": 20}
 
 
+def test_search_results_accept_disease_and_symptom_labels():
+    fake = FakeNeo4j([])
+
+    build_search_results(fake, "", limit=20, label="Disease,Symptom")
+
+    query, parameters = fake.calls[0]
+    assert "any(item IN split($labels, ',')" in query
+    assert parameters == {"query": "", "labels": "Disease,Symptom", "source": "", "effects": "", "limit": 20}
+
+
+def test_disease_and_symptom_search_ignore_formula_filters():
+    fake = FakeNeo4j([])
+
+    build_search_results(fake, "", limit=20, label="Disease", source="伤寒论", effects=["发汗解表"])
+
+    assert fake.calls[0][1] == {"query": "", "labels": "Disease", "source": "", "effects": "", "limit": 20}
+
+
 def test_search_results_can_filter_by_source_and_effects():
     fake = FakeNeo4j([])
 
@@ -116,6 +134,14 @@ def test_search_results_can_filter_by_source_and_effects():
         "effects": "发汗解表|宣肺平喘",
         "limit": 20,
     }
+
+
+def test_search_results_raise_limit_cap_to_three_thousand():
+    fake = FakeNeo4j([])
+
+    build_search_results(fake, "", limit=3000)
+
+    assert fake.calls[0][1]["limit"] == 3000
 
 
 def test_search_results_summarize_related_entities():

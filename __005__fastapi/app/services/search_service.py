@@ -34,10 +34,12 @@ SEARCH_QUERY = ensure_read_only_cypher(
 
 def build_search_results(neo4j_client, query, limit=10, label="", source="", effects=None):
     clean_query = (query or "").strip()
-    clean_labels = ",".join(_normalize_labels(label))
-    clean_source = (source or "").strip()
-    clean_effects = "|".join(effect.strip() for effect in (effects or []) if effect and effect.strip())
-    clean_limit = max(1, min(int(limit or 10), 1000))
+    labels = _normalize_labels(label)
+    clean_labels = ",".join(labels)
+    ignores_formula_filters = labels and all(item in {"Disease", "Symptom"} for item in labels)
+    clean_source = "" if ignores_formula_filters else (source or "").strip()
+    clean_effects = "" if ignores_formula_filters else "|".join(effect.strip() for effect in (effects or []) if effect and effect.strip())
+    clean_limit = max(1, min(int(limit or 10), 3000))
     records = neo4j_client.run_cypher(
         SEARCH_QUERY,
         {
@@ -56,7 +58,7 @@ def _normalize_labels(label):
         raw_labels = label
     else:
         raw_labels = str(label or "").split(",")
-    allowed = {"Formula", "Herb"}
+    allowed = {"Formula", "Herb", "Disease", "Symptom"}
     labels = [item.strip() for item in raw_labels if item and item.strip() in allowed]
     return labels
 

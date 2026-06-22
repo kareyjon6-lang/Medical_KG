@@ -168,6 +168,7 @@ const demoResults = [
 ];
 
 const hotQueries = ["麻黄汤", "桂枝汤", "银翘散", "四君子汤", "发汗解表", "风寒表实证"];
+const SEARCH_RESULT_LIMIT = 3000;
 const relationFilters = ["HAS_INGREDIENT", "HAS_EFFECT", "FROM_SOURCE", "ALLEVIATES_SYMPTOM", "TREATS_DISEASE"];
 
 const authRuntime = {
@@ -1060,7 +1061,8 @@ export default function Workbench({ initialView = "assistant" }) {
       sourceFilter: nextSourceFilter = sourceFilter,
       effectFilters: nextEffectFilters = effectFilters,
     } = options;
-    const backendLabel = entityFilterToBackendLabel(nextEntityFilter);
+    const normalizedSearchFilters = normalizeSearchFilters(nextEntityFilter, nextSourceFilter, nextEffectFilters);
+    const backendLabel = normalizedSearchFilters.label;
     setLoading(true);
     setStatus(cleanText ? "正在检索方药知识" : backendLabel ? `正在载入${nextEntityFilter}` : "正在载入全部实体");
     try {
@@ -1083,14 +1085,14 @@ export default function Workbench({ initialView = "assistant" }) {
       if (replaceRoute) {
         router.replace(cleanText ? `/search?q=${encodeURIComponent(cleanText)}` : "/search");
       }
-      const searchData = await fetchSearchResults(cleanText, 1000, {
+      const searchData = await fetchSearchResults(cleanText, SEARCH_RESULT_LIMIT, {
         label: backendLabel,
-        source: nextSourceFilter,
-        effects: nextEffectFilters,
+        source: normalizedSearchFilters.source,
+        effects: normalizedSearchFilters.effects,
       });
       const nextResults = searchData.items?.length ? searchData.items : [];
       setResults(nextResults);
-      setSelectedResult(nextResults[0] || null);
+      setSelectedResult((current) => nextResults.find((item) => item.id === current?.id) || nextResults[0] || null);
       setStatus(nextResults.length ? (cleanText ? `已找到 ${nextResults.length} 条结果` : `已载入 ${nextResults.length} 个实体`) : "暂无匹配结果");
     } catch (error) {
       setResults([]);
@@ -1466,15 +1468,157 @@ function buildReasoningSteps(thoughts, progress, loading) {
 }
 
 function SearchPanel(props) {
-  const { query, setQuery, results, allResults, selectedResult, entityFilter, setEntityFilter, sourceFilter, setSourceFilter, effectFilters, onToggleEffect, loading, onSubmit, onSelectResult, onClearFilters, onQuickSearch, onRotateHotQueries, hotOffset, graphFocus } = props;
-  const entityOptions = ["全部", "方剂", "药材"];
+  const {
+    query,
+    setQuery,
+    results,
+    allResults,
+    selectedResult,
+    entityFilter,
+    setEntityFilter,
+    sourceFilter,
+    setSourceFilter,
+    effectFilters,
+    onToggleEffect,
+    loading,
+    onSubmit,
+    onSelectResult,
+    onClearFilters,
+    onQuickSearch,
+    onRotateHotQueries,
+    hotOffset,
+    graphFocus,
+  } = props;
+  const entityOptions = ["全部", "方剂", "药材", "疾病", "症状"];
   const sourceOptions = ["伤寒论", "金匮要略", "温病条辨", "太平惠民和剂局方"];
   const effectOptions = ["发汗解表", "清热解毒", "补气", "化痰止咳", "利水渗湿"];
   const visibleHotQueries = Array.from({ length: Math.min(5, hotQueries.length) }, (_, index) => hotQueries[(hotOffset + index) % hotQueries.length]);
   const detailEntries = Object.entries(selectedResult?.properties || {});
   const primaryDetailEntries = detailEntries.filter(([key]) => key !== "related").slice(0, 10);
   const relatedDetail = selectedResult?.properties?.related;
-  return <div className="search-layout"><aside className="search-filter-panel"><div className="panel-heading"><h2>{"筛选"}</h2><button type="button" className="text-button" onClick={onClearFilters}>{"清空"}</button></div><div className="filter-section"><strong>{"实体类型"}</strong>{entityOptions.map((filter) => <label key={filter} className={entityFilter === filter ? "check-row active" : "check-row"}><input type="checkbox" checked={entityFilter === filter} onChange={() => setEntityFilter(filter)} /><span>{filter}</span></label>)}</div><div className="filter-section"><strong>{"方书来源"}</strong><label className={!sourceFilter ? "check-row active" : "check-row"}><input type="checkbox" checked={!sourceFilter} onChange={() => setSourceFilter("")} /><span>{"全部"}</span></label>{sourceOptions.map((source) => <label key={source} className={sourceFilter === source ? "check-row active" : "check-row"}><input type="checkbox" checked={sourceFilter === source} onChange={() => setSourceFilter(source)} /><span>{source}</span></label>)}</div><div className="filter-section"><strong>{"功效"}</strong>{effectOptions.map((effect) => <label key={effect} className={effectFilters.includes(effect) ? "check-row active" : "check-row"}><input type="checkbox" checked={effectFilters.includes(effect)} onChange={() => onToggleEffect(effect)} /><span>{effect}</span></label>)}</div></aside><section className="search-main"><form className="search-box" onSubmit={onSubmit}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索方剂、药材、功效或症状" /><button type="submit" disabled={loading}>{loading ? "搜索中" : "搜索"}</button></form><div className="facet-row"><strong>{"热门检索"}</strong>{visibleHotQueries.map((item) => <button key={item} type="button" className="facet" onClick={() => onQuickSearch(item)}>{item}</button>)}<button type="button" className="facet ghost" onClick={onRotateHotQueries}>{"换一组"}</button></div><div className="result-tools"><span>{"共 "}{allResults.length}{" 条结果"}</span></div><div className="result-list">{loading && <SearchSkeleton />}{!loading && results.map((item) => <button type="button" className={selectedResult?.id === item.id ? "result-card active" : "result-card"} key={item.id} onClick={() => onSelectResult(item)}><div className="result-title"><span className={["entity-chip", item.label].join(" ")}>{entityLabel(item.label)}</span><h2>{item.name}</h2><ChevronRight size={18} /></div><dl>{["source", "ingredients", "effect", "indication", "taboo"].map((key) => item.properties?.[key] ? <div key={key}><dt>{propertyLabel(key)}</dt><dd>{String(item.properties[key])}</dd></div> : null)}</dl><p className="relation-count">{countRelated(item)} {"条关系"}</p></button>)}{!results.length && !loading && <p className="empty-note">{"暂无匹配结果，请更换关键词或清空筛选。"}</p>}</div></section><aside className="search-side"><section className="sync-panel"><p className="eyebrow">{"图谱联动"}</p><h2>{"同步到知识图谱"}</h2><strong>{graphFocus || "未选实体"}</strong><span>{graphFocus ? "已准备查看 · 深度 1/2 · 上限 80" : "搜索后自动同步"}</span><Link className="primary-link" href={graphFocus ? "/graph?q=" + encodeURIComponent(graphFocus) : "/graph"}>{"打开图谱"}</Link></section><section className="detail-panel"><p className="eyebrow">{"实体详情"}</p>{selectedResult ? <><h2>{selectedResult.name}</h2><div className="detail-tabs"><span className={["entity-chip", selectedResult.label].join(" ")}>{entityLabel(selectedResult.label)}</span><span>{countRelated(selectedResult)} {"关系"}</span></div><dl>{primaryDetailEntries.map(([key, value]) => <div key={key}><dt>{propertyLabel(key)}</dt><dd>{String(value)}</dd></div>)}{relatedDetail && <div><dt>{"关联知识"}</dt><dd>{String(relatedDetail)}</dd></div>}</dl><Link className="secondary-link" href={"/assistant?q=" + encodeURIComponent(selectedResult.name)}>{"在问答中解释"}</Link></> : <p className="empty-note">{"请从左侧选择一个结果"}</p>}</section></aside></div>;
+  return (
+    <div className="search-layout">
+      <aside className="search-filter-panel">
+        <div className="panel-heading">
+          <h2>{"筛选"}</h2>
+          <button type="button" className="text-button" onClick={onClearFilters}>{"清空"}</button>
+        </div>
+        <div className="filter-section">
+          <strong>{"实体类型"}</strong>
+          {entityOptions.map((filter) => (
+            <label key={filter} className={entityFilter === filter ? "check-row active" : "check-row"}>
+              <input type="checkbox" checked={entityFilter === filter} onChange={() => setEntityFilter(filter)} />
+              <span>{filter}</span>
+            </label>
+          ))}
+        </div>
+        <div className="filter-section">
+          <strong>{"方书来源"}</strong>
+          <label className={!sourceFilter ? "check-row active" : "check-row"}>
+            <input type="checkbox" checked={!sourceFilter} onChange={() => setSourceFilter("")} />
+            <span>{"全部"}</span>
+          </label>
+          {sourceOptions.map((source) => (
+            <label key={source} className={sourceFilter === source ? "check-row active" : "check-row"}>
+              <input type="checkbox" checked={sourceFilter === source} onChange={() => setSourceFilter(source)} />
+              <span>{source}</span>
+            </label>
+          ))}
+        </div>
+        <div className="filter-section">
+          <strong>{"功效"}</strong>
+          {effectOptions.map((effect) => (
+            <label key={effect} className={effectFilters.includes(effect) ? "check-row active" : "check-row"}>
+              <input type="checkbox" checked={effectFilters.includes(effect)} onChange={() => onToggleEffect(effect)} />
+              <span>{effect}</span>
+            </label>
+          ))}
+        </div>
+      </aside>
+      <section className="search-main">
+        <form className="search-box" onSubmit={onSubmit}>
+          <Search size={18} />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索方剂、药材、疾病或症状" />
+          <button type="submit" disabled={loading}>{loading ? "搜索中" : "搜索"}</button>
+        </form>
+        <div className="facet-row">
+          <strong>{"热门检索"}</strong>
+          {visibleHotQueries.map((item) => (
+            <button key={item} type="button" className="facet" onClick={() => onQuickSearch(item)}>{item}</button>
+          ))}
+          <button type="button" className="facet ghost" onClick={onRotateHotQueries}>{"换一组"}</button>
+        </div>
+        <div className="result-tools">
+          <span>{"共 "}{allResults.length}{" 条结果"}</span>
+        </div>
+        <div className="result-list">
+          {loading && <SearchSkeleton />}
+          {!loading && results.map((item) => (
+            <button
+              type="button"
+              className={selectedResult?.id === item.id ? "result-card active" : "result-card"}
+              key={item.id}
+              onClick={() => onSelectResult(item)}
+            >
+              <div className="result-title">
+                <span className={["entity-chip", item.label].join(" ")}>{entityLabel(item.label)}</span>
+                <h2>{item.name}</h2>
+                <ChevronRight size={18} />
+              </div>
+              <dl>
+                {searchCardKeysFor(item).map((key) => item.properties?.[key] ? (
+                  <div key={key}>
+                    <dt>{propertyLabel(key)}</dt>
+                    <dd>{String(item.properties[key])}</dd>
+                  </div>
+                ) : null)}
+              </dl>
+              <p className="relation-count">{countRelated(item)} {"条关系"}</p>
+            </button>
+          ))}
+          {!results.length && !loading && <p className="empty-note">{"暂无匹配结果，请更换关键词或清空筛选。"}</p>}
+        </div>
+      </section>
+      <aside className="search-side">
+        <section className="sync-panel">
+          <p className="eyebrow">{"图谱联动"}</p>
+          <h2>{"同步到知识图谱"}</h2>
+          <strong>{graphFocus || "未选实体"}</strong>
+          <span>{graphFocus ? "已准备查看 · 深度 1/2 · 上限 80" : "搜索后自动同步"}</span>
+          <Link className="primary-link" href={graphFocus ? "/graph?q=" + encodeURIComponent(graphFocus) : "/graph"}>{"打开图谱"}</Link>
+        </section>
+        <section className="detail-panel">
+          <p className="eyebrow">{"实体详情"}</p>
+          {selectedResult ? (
+            <>
+              <h2>{selectedResult.name}</h2>
+              <div className="detail-tabs">
+                <span className={["entity-chip", selectedResult.label].join(" ")}>{entityLabel(selectedResult.label)}</span>
+                <span>{countRelated(selectedResult)} {"关系"}</span>
+              </div>
+              <dl>
+                {primaryDetailEntries.map(([key, value]) => (
+                  <div key={key}>
+                    <dt>{propertyLabel(key)}</dt>
+                    <dd>{String(value)}</dd>
+                  </div>
+                ))}
+                {relatedDetail && (
+                  <div>
+                    <dt>{"关联知识"}</dt>
+                    <dd>{String(relatedDetail)}</dd>
+                  </div>
+                )}
+              </dl>
+              <Link className="secondary-link" href={"/assistant?q=" + encodeURIComponent(selectedResult.name)}>{"在问答中解释"}</Link>
+            </>
+          ) : (
+            <p className="empty-note">{"请从左侧选择一个结果"}</p>
+          )}
+        </section>
+      </aside>
+    </div>
+  );
 }
 
 function GraphPanel(props) {
@@ -2456,9 +2600,31 @@ function markInterruptedAssistant(messages) {
 }
 function cleanMarkdown(text) { return text.replace(/\*\*/g, "").trim(); }
 function countRelated(item) { const related = item.properties?.related; if (!related) return 0; return String(related).split(/[;；]/).filter(Boolean).length; }
-function propertyLabel(key) { return { source: "出处", ingredients: "组成", effect: "功效", usage: "用法", taboo: "禁忌", indication: "主治", category: "分类", nature: "药性", flavor: "药味", meridian: "归经", dosage: "剂量", preparation: "炮制", alias: "别名", description: "说明", related: "关联知识", label: "类型" }[key] || key; }
+function searchCardKeysFor(item) {
+  if (["Disease", "Symptom"].includes(item?.label)) {
+    return ["description", "indication", "effect", "category", "related"];
+  }
+  return ["source", "ingredients", "effect", "indication", "taboo"];
+}
+function propertyLabel(key) { return { source: "出处", ingredients: "组成", effect: "功效", usage: "用法", taboo: "禁忌", indication: "主治", category: "分类", nature: "药性", flavor: "药味", meridian: "归经", dosage: "剂量", preparation: "炮制", alias: "别名", description: "说明", related: "关联知识", label: "类型", disease: "疾病", symptom: "症状" }[key] || key; }
 function entityLabel(label) { return { Formula: "方剂", Herb: "药材", Symptom: "症状", Disease: "疾病", Effect: "功效", Source: "出处", FormulaCategory: "方剂分类", HerbNature: "药性", HerbFlavor: "药味", Meridian: "归经", Entity: "实体" }[label] || label; }
-function entityFilterToBackendLabel(filter) { if (filter === "方剂") return "Formula"; if (filter === "药材") return "Herb"; return "Formula,Herb"; }
+function entityFilterToBackendLabel(filter) {
+  if (filter === "方剂") return "Formula";
+  if (filter === "药材") return "Herb";
+  if (filter === "疾病") return "Disease";
+  if (filter === "症状") return "Symptom";
+  return "Formula,Herb,Disease,Symptom";
+}
+function normalizeSearchFilters(entityFilter, sourceFilter, effectFilters) {
+  const safeEffects = Array.isArray(effectFilters) ? effectFilters : [];
+  if (["疾病", "症状"].includes(entityFilter)) {
+    return { label: entityFilterToBackendLabel(entityFilter), source: "", effects: [] };
+  }
+  if (entityFilter === "全部" && ((sourceFilter || "").trim() || safeEffects.length)) {
+    return { label: "Formula,Herb", source: sourceFilter, effects: safeEffects };
+  }
+  return { label: entityFilterToBackendLabel(entityFilter), source: sourceFilter, effects: safeEffects };
+}
 function relationLabel(label) { return { HAS_INGREDIENT: "组成", ALLEVIATES_SYMPTOM: "缓解症状", TREATS_DISEASE: "治疗疾病", HAS_EFFECT: "具有功效", BELONGS_TO_CATEGORY: "归属分类", FROM_SOURCE: "出自", HAS_NATURE: "药性", HAS_FLAVOR: "药味", ENTERS_MERIDIAN: "归经", RELATED_TO: "相关" }[label] || String(label || "").replaceAll("_", ""); }
 
 function entityColor(label, focused = false) {
