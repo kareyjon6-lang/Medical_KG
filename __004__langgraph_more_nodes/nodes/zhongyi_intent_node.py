@@ -6,6 +6,26 @@ from __005__fastapi.__003__msg_queue import put_think_text_to_msg
 from __004__langgraph_more_nodes.nodes.runtime_config import get_thread_id
 
 
+TCM_DIRECT_KEYWORDS = (
+    "中医", "中药", "药材", "方剂", "方子", "主治", "功效", "禁忌", "归经", "药性", "药味",
+    "穴位", "艾灸", "针灸", "脉象", "舌苔", "症状", "本草", "伤寒论", "配伍",
+)
+TCM_FORMULA_SUFFIXES = ("汤", "丸", "散", "饮", "膏", "丹", "剂", "露")
+
+
+def infer_tcm_intent_fast(text: str):
+    clean_text = (text or "").strip()
+    if not clean_text:
+        return False
+    if any(keyword in clean_text for keyword in TCM_DIRECT_KEYWORDS):
+        return True
+    if "什么药" in clean_text or "吃什么" in clean_text or "怎么用药" in clean_text:
+        return True
+    if len(clean_text) <= 24 and clean_text.endswith(TCM_FORMULA_SUFFIXES):
+        return True
+    return None
+
+
 async def zhongyi_intent_node(state: AgentState, config: RunnableConfig | None = None):
     # 获取用户ID
     user_id = get_thread_id(config, state)
@@ -13,6 +33,13 @@ async def zhongyi_intent_node(state: AgentState, config: RunnableConfig | None =
     await put_think_text_to_msg(user_id, "开始识别中医意图")
     # 获取用户输入
     user_input = state["input_semantic_trans"]
+
+    fast_result = infer_tcm_intent_fast(user_input)
+    if fast_result is not None:
+        state["is_zhongyi_intent"] = fast_result
+        print(f"完成识别是否是中医的意图识别{state['is_zhongyi_intent']}")
+        await put_think_text_to_msg(user_id, f"完成识别中医意图：{'是' if state['is_zhongyi_intent'] else '否'}")
+        return state
 
     # 构建提示词：只允许输出“是”或“否”
     prompt = f"""

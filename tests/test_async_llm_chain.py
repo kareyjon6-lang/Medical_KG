@@ -17,8 +17,11 @@ def test_llm_adapter_exposes_async_concurrency_helpers():
     source = (ROOT / "common" / "llm.py").read_text(encoding="utf-8")
 
     assert "LLM_API_CONCURRENCY" in source
+    assert "LLM_API_TIMEOUT_SECONDS" in source
+    assert "LLM_API_STREAM_IDLE_TIMEOUT_SECONDS" in source
     assert "async def llm_ainvoke" in source
     assert "async def llm_astream" in source
+    assert "asyncio.wait_for" in source
 
 
 def test_langgraph_llm_nodes_do_not_call_sync_llm_methods_directly():

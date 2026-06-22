@@ -10,6 +10,13 @@ from common.config import Config
 conf = Config()
 
 
+def should_skip_semantic_transcription(user_input: str, history_messages) -> bool:
+    text = (user_input or "").strip()
+    if not text:
+        return True
+    return len(history_messages or []) == 0
+
+
 async def semantic_transcription_node(state: AgentState, config: RunnableConfig | None = None) -> AgentState:
     """
     语义转写节点：
@@ -27,6 +34,13 @@ async def semantic_transcription_node(state: AgentState, config: RunnableConfig 
     user_input = state["input"]
     history_messages = state.get("history_messages", [])
     print(f"历史消息：{history_messages}")
+
+    if should_skip_semantic_transcription(user_input, history_messages):
+        result = user_input.strip()
+        state["history_messages"] = [*history_messages, {"role": "user", "content": user_input}]
+        state["input_semantic_trans"] = result
+        await put_think_text_to_msg(user_id, f"完成生成语义转写：{result}")
+        return state
 
     # 更新历史
     history_messages.append({"role": "user", "content": user_input})
