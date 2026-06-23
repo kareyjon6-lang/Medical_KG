@@ -28,7 +28,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   adminLogin,
@@ -223,6 +223,89 @@ function getChatRuntime(key = anonymousRuntimeKey) {
   }
   return chatRuntimeStore.get(key);
 }
+
+const landingKnowledgeSteps = [
+  {
+    number: "01",
+    title: "资料归档",
+    lead: "把方剂、中药与出处资料拆成稳定字段，减少错别字、漏项和重复记录。",
+    facts: ["方剂：组成、功效、主治、出处", "中药：性味、归经、用量、禁忌", "资料进入系统前先做结构化校对"],
+  },
+  {
+    number: "02",
+    title: "知识索引",
+    lead: "将名称、功效、主治和来源变成可检索索引，让用户从任意线索进入内容。",
+    facts: ["按方剂名快速定位条目", "按功效和病症辅助筛选", "按出处保留资料来源依据"],
+  },
+  {
+    number: "03",
+    title: "问答证据",
+    lead: "问答不只返回结论，还尽量展示命中的方剂、药材和资料依据。",
+    facts: ["一贯煎：滋养疏肝", "三仁汤：清利湿热，宣畅气机", "丁香：温中降逆，温肾助阳"],
+  },
+  {
+    number: "04",
+    title: "持续扩展",
+    lead: "后续新增方剂和中药时，首页内容、检索入口和问答体验都能保持同一套语言。",
+    facts: ["新资料先入库再呈现", "相近名称需要标准化", "面向学习与检索保持简洁表达"],
+  },
+  {
+    number: "05",
+    title: "登录探索",
+    lead: "首页负责建立认知，完整检索、问答和后台管理仍通过登录进入系统。",
+    facts: ["引导用户进入完整功能", "保留首屏药图动态", "下拉区只承担知识导览"],
+  },
+];
+
+const landingMateriaCards = [
+  {
+    number: "01",
+    label: "FORMULA",
+    name: "方剂资料整理",
+    detail: "以一贯煎、三仁汤等条目为样本，展示组成、主治、功效与出处如何被拆解为可读字段。",
+    images: ["/images/landing-herb-atlas.png", "/images/workspace-tcm-soft-bg.png", "/images/landing-spring-herb-texture.png"],
+  },
+  {
+    number: "02",
+    label: "HERB",
+    name: "药材知识切片",
+    detail: "以丁香、三七等药材为入口，用短句呈现功效、性味、归经与使用边界。",
+    images: ["/images/landing-knowledge-stilllife.png", "/images/workspace-tcm-wash-bg.png", "/images/landing-herb-atlas.png"],
+  },
+  {
+    number: "03",
+    label: "ANSWER",
+    name: "问答证据入口",
+    detail: "用户登录后可围绕方剂、药材和病症提问，系统尽量保留命中资料的可追溯表达。",
+    images: ["/images/workspace-tcm-vivid-bg.png", "/images/landing-spring-herb-texture.png", "/images/workspace-tcm-continuous-bg.png"],
+  },
+];
+
+const landingKnowledgeFlowRows = [
+  [
+    { title: "一贯煎", subtitle: "滋养疏肝", image: "/images/landing-herb-atlas.png" },
+    { title: "三仁汤", subtitle: "清利湿热", image: "/images/landing-spring-herb-texture.png" },
+    { title: "方剂出处", subtitle: "保留来源", image: "/images/workspace-tcm-soft-bg.png" },
+    { title: "药材组成", subtitle: "拆解药味", image: "/images/landing-knowledge-stilllife.png" },
+    { title: "主治线索", subtitle: "辅助检索", image: "/images/workspace-tcm-wash-bg.png" },
+  ],
+  [
+    { title: "丁香", subtitle: "温中降逆", image: "/images/landing-knowledge-stilllife.png" },
+    { title: "三七", subtitle: "散瘀止血", image: "/images/workspace-tcm-vivid-bg.png" },
+    { title: "功效索引", subtitle: "按需进入", image: "/images/landing-herb-atlas.png" },
+    { title: "问答证据", subtitle: "有据可查", image: "/images/landing-spring-herb-texture.png" },
+    { title: "知识入库", subtitle: "持续扩展", image: "/images/workspace-tcm-continuous-bg.png" },
+  ],
+];
+
+const landingAnimatedStatement =
+  "方药知识，可检索、可追溯、可提问。";
+
+const landingSplitTitle = "古籍方药\n智能入口";
+const landingPressureTitle = "方药知识 可检索 可追溯";
+const landingProximityTitle = "资料到检索 五环节";
+const landingTrailTitle = "三组卡片 讲清知识叙事";
+const landingGlitchTitle = "登录探索方药证据";
 
 function snapshotChatRuntime(runtime) {
   const activeState = runtime.activeThreadId ? runtime.threads[runtime.activeThreadId] : null;
@@ -1941,67 +2024,326 @@ function roundRect(ctx, x, y, width, height, radius) {
   ctx.closePath();
 }
 
-const landingSpotlightRadius = 260;
+function LandingRevealLayer({ image }) {
+  return (
+    <div
+      className="landing-reveal-layer"
+      aria-hidden="true"
+      style={{ backgroundImage: `url(${image})` }}
+    />
+  );
+}
 
-function LandingRevealLayer({ image, cursorX, cursorY }) {
-  const canvasRef = useRef(null);
-  const revealRef = useRef(null);
+function DynamicSplitText({ text, className = "", tag: Tag = "h2", delay = 42 }) {
+  const ref = useRef(null);
+  const [active, setActive] = useState(false);
+  const [cycle, setCycle] = useState(0);
+  const chars = Array.from(text);
 
   useEffect(() => {
-    function resizeCanvas() {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ratio = window.devicePixelRatio || 1;
-      canvas.width = Math.ceil(window.innerWidth * ratio);
-      canvas.height = Math.ceil(window.innerHeight * ratio);
-      canvas.style.width = `${window.innerWidth}px`;
-      canvas.style.height = `${window.innerHeight}px`;
-      const ctx = canvas.getContext("2d");
-      if (ctx) ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    const element = ref.current;
+    if (!element) return undefined;
+    if (!("IntersectionObserver" in window)) {
+      setActive(true);
+      return undefined;
     }
 
-    resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
-    return () => window.removeEventListener("resize", resizeCanvas);
+    let frameId = 0;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setActive(false);
+          frameId = window.requestAnimationFrame(() => {
+            setCycle((value) => value + 1);
+            setActive(true);
+          });
+        } else {
+          setActive(false);
+        }
+      },
+      { threshold: 0.18, rootMargin: "0px 0px -8% 0px" },
+    );
+
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      if (frameId) window.cancelAnimationFrame(frameId);
+    };
   }, []);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const reveal = revealRef.current;
-    if (!canvas || !reveal) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+  return (
+    <Tag
+      ref={ref}
+      className={["dynamic-text", "split-dynamic-text", active ? "blur-text-ready" : "", className].filter(Boolean).join(" ")}
+      aria-label={text.replace(/\n/g, " ")}
+      data-motion="blur-text"
+      data-motion-cycle={cycle}
+    >
+      {chars.map((char, index) => (
+        <span
+          className={char === "\n" ? "split-line-break" : "split-char blur-char"}
+          key={`${cycle}-${char}-${index}`}
+          style={{ "--char-delay": `${index * delay}ms` }}
+          aria-hidden="true"
+        >
+          {char === "\n" ? "" : char === " " ? "\u00A0" : char}
+        </span>
+      ))}
+    </Tag>
+  );
+}
 
-    if (cursorX > -100 && cursorY > -100) {
-      const gradient = ctx.createRadialGradient(cursorX, cursorY, 0, cursorX, cursorY, landingSpotlightRadius);
-      gradient.addColorStop(0, "rgba(255,255,255,1)");
-      gradient.addColorStop(0.4, "rgba(255,255,255,1)");
-      gradient.addColorStop(0.6, "rgba(255,255,255,0.75)");
-      gradient.addColorStop(0.75, "rgba(255,255,255,0.4)");
-      gradient.addColorStop(0.88, "rgba(255,255,255,0.12)");
-      gradient.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(cursorX, cursorY, landingSpotlightRadius, 0, Math.PI * 2);
-      ctx.fill();
+function PressureText({ text, className = "", tag: Tag = "h2" }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    let rafId = 0;
+    let inView = false;
+    let running = false;
+    let settleFrames = 0;
+    let pointer = { x: 0.5, y: 0.5 };
+    let smooth = { x: 0.5, y: 0.5 };
+
+    function updatePointer(clientX, clientY) {
+      const rect = element.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      pointer = {
+        x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
+        y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
+      };
     }
 
-    const mask = `url(${canvas.toDataURL()})`;
-    reveal.style.maskImage = mask;
-    reveal.style.webkitMaskImage = mask;
-  }, [cursorX, cursorY]);
+    function onPointerMove(event) {
+      updatePointer(event.clientX, event.clientY);
+      requestTick();
+    }
+
+    function tick() {
+      if (!inView) {
+        running = false;
+        return;
+      }
+      const delta = Math.hypot(pointer.x - smooth.x, pointer.y - smooth.y);
+      smooth.x += (pointer.x - smooth.x) / 14;
+      smooth.y += (pointer.y - smooth.y) / 14;
+      const rect = element.getBoundingClientRect();
+      const chars = element.querySelectorAll(".pressure-char");
+      chars.forEach((charEl) => {
+        const charRect = charEl.getBoundingClientRect();
+        const centerX = (charRect.left + charRect.width / 2 - rect.left) / Math.max(rect.width, 1);
+        const centerY = (charRect.top + charRect.height / 2 - rect.top) / Math.max(rect.height, 1);
+        const distance = Math.hypot(smooth.x - centerX, smooth.y - centerY);
+        const pressure = Math.max(0, 1 - distance / 0.42);
+        const weight = Math.round(420 + pressure * 520);
+        const width = 0.88 + pressure * 0.22;
+        const italic = (smooth.x - centerX) * pressure * -10;
+        charEl.style.fontWeight = String(weight);
+        charEl.style.transform = `scaleX(${width}) skewX(${italic}deg) translateY(${pressure * -4}px)`;
+        charEl.style.opacity = String(0.58 + pressure * 0.42);
+        charEl.style.filter = `drop-shadow(0 ${6 + pressure * 8}px ${10 + pressure * 16}px rgba(122, 156, 83, ${0.08 + pressure * 0.18}))`;
+      });
+      settleFrames = delta < 0.002 ? settleFrames + 1 : 0;
+      if (settleFrames < 18) {
+        rafId = requestAnimationFrame(tick);
+      } else {
+        running = false;
+      }
+    }
+
+    function requestTick() {
+      if (running || !inView) return;
+      running = true;
+      settleFrames = 0;
+      rafId = requestAnimationFrame(tick);
+    }
+
+    const observer = "IntersectionObserver" in window ? new IntersectionObserver(
+      ([entry]) => {
+        inView = entry.isIntersecting;
+        if (inView) requestTick();
+        else {
+          running = false;
+          cancelAnimationFrame(rafId);
+        }
+      },
+      { threshold: 0.08 },
+    ) : null;
+
+    element.addEventListener("pointermove", onPointerMove, { passive: true });
+    observer?.observe(element);
+    if (!observer) {
+      inView = true;
+      requestTick();
+    }
+    return () => {
+      element.removeEventListener("pointermove", onPointerMove);
+      observer?.disconnect();
+      cancelAnimationFrame(rafId);
+    };
+  }, []);
 
   return (
-    <>
-      <canvas ref={canvasRef} className="landing-reveal-canvas" aria-hidden="true" />
-      <div
-        ref={revealRef}
-        className="landing-reveal-layer"
-        aria-hidden="true"
-        style={{ backgroundImage: `url(${image})` }}
-      />
-    </>
+    <Tag ref={ref} className={["dynamic-text", "pressure-text", className].filter(Boolean).join(" ")} aria-label={text}>
+      {Array.from(text).map((char, index) => (
+        <span className="pressure-char" key={`${char}-${index}`} style={{ "--pressure-index": index }} aria-hidden="true">
+          {char === " " ? "\u00A0" : char}
+        </span>
+      ))}
+    </Tag>
+  );
+}
+
+function ProximityText({ text, className = "", tag: Tag = "h2" }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    let rafId = 0;
+    let inView = false;
+    let running = false;
+    let pointer = { x: 0.5, y: 0.5 };
+
+    function updatePointer(clientX, clientY) {
+      const rect = element.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      pointer = {
+        x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
+        y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
+      };
+    }
+
+    function onPointerMove(event) {
+      updatePointer(event.clientX, event.clientY);
+      requestTick();
+    }
+
+    function tick() {
+      if (!inView) {
+        running = false;
+        return;
+      }
+      const rect = element.getBoundingClientRect();
+      const chars = element.querySelectorAll(".proximity-char");
+      chars.forEach((charEl) => {
+        const charRect = charEl.getBoundingClientRect();
+        const centerX = (charRect.left + charRect.width / 2 - rect.left) / Math.max(rect.width, 1);
+        const centerY = (charRect.top + charRect.height / 2 - rect.top) / Math.max(rect.height, 1);
+        const distance = Math.hypot(pointer.x - centerX, pointer.y - centerY);
+        const influence = Math.max(0, 1 - distance / 0.32);
+        const weight = Math.round(420 + influence * 520);
+        const width = Math.round(88 + influence * 28);
+        charEl.style.fontVariationSettings = `'wght' ${weight}, 'wdth' ${width}`;
+        charEl.style.transform = `translateY(${(1 - influence) * 5}px) scale(${1 + influence * 0.035})`;
+        charEl.style.textShadow = `0 0 ${10 + influence * 20}px rgba(122, 156, 83, ${0.14 + influence * 0.24})`;
+      });
+      running = false;
+    }
+
+    function requestTick() {
+      if (running || !inView) return;
+      running = true;
+      rafId = requestAnimationFrame(tick);
+    }
+
+    pointer = { x: 0.5, y: 0.5 };
+    const observer = "IntersectionObserver" in window ? new IntersectionObserver(
+      ([entry]) => {
+        inView = entry.isIntersecting;
+        if (inView) requestTick();
+        else {
+          running = false;
+          cancelAnimationFrame(rafId);
+        }
+      },
+      { threshold: 0.08 },
+    ) : null;
+
+    element.addEventListener("pointermove", onPointerMove, { passive: true });
+    observer?.observe(element);
+    if (!observer) {
+      inView = true;
+      requestTick();
+    }
+    return () => {
+      element.removeEventListener("pointermove", onPointerMove);
+      observer?.disconnect();
+      cancelAnimationFrame(rafId);
+    };
+  }, []);
+
+  return (
+    <Tag ref={ref} className={["dynamic-text", "proximity-text", className].filter(Boolean).join(" ")} aria-label={text}>
+      {Array.from(text).map((char, index) => (
+        <span className="proximity-char" key={`${char}-${index}`} aria-hidden="true">
+          {char === " " ? "\u00A0" : char}
+        </span>
+      ))}
+    </Tag>
+  );
+}
+
+function CursorTrailText({ text, className = "", children }) {
+  const [trail, setTrail] = useState([]);
+  const trailIdRef = useRef(0);
+  const lastPointRef = useRef(null);
+
+  useEffect(() => {
+    if (!trail.length) return undefined;
+    const timer = window.setTimeout(() => setTrail((items) => items.slice(1)), 90);
+    return () => window.clearTimeout(timer);
+  }, [trail]);
+
+  function onPointerMove(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const lastPoint = lastPointRef.current;
+    if (lastPoint && Math.hypot(x - lastPoint.x, y - lastPoint.y) < 74) return;
+    const angle = lastPoint ? Math.atan2(y - lastPoint.y, x - lastPoint.x) * 180 / Math.PI : 0;
+    lastPointRef.current = { x, y };
+    const nextPoint = {
+      id: trailIdRef.current++,
+      x,
+      y,
+      angle,
+      driftX: Math.sin(trailIdRef.current * 1.7) * 8,
+      driftY: Math.cos(trailIdRef.current * 1.3) * 8,
+    };
+    setTrail((items) => [...items, nextPoint].slice(-8));
+  }
+
+  return (
+    <div className={["cursor-trail-zone", className].filter(Boolean).join(" ")} onPointerMove={onPointerMove} onPointerLeave={() => setTrail([])}>
+      {children}
+      <div className="cursor-trail-layer" aria-hidden="true">
+        {trail.map((item) => (
+          <span
+            className="cursor-trail-item"
+            key={item.id}
+            style={{
+              left: item.x,
+              top: item.y,
+              "--trail-angle": `${item.angle}deg`,
+              "--trail-drift-x": `${item.driftX}px`,
+              "--trail-drift-y": `${item.driftY}px`,
+            }}
+          >
+            {text}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GlitchText({ text, className = "", tag: Tag = "h2" }) {
+  return (
+    <Tag className={["dynamic-text", "glitch-text", className].filter(Boolean).join(" ")} data-text={text}>
+      {text}
+    </Tag>
   );
 }
 
@@ -2016,10 +2358,7 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
   const [loading, setLoading] = useState(false);
   const landingRef = useRef(null);
   const loginRef = useRef(null);
-  const landingMouse = useRef({ x: -999, y: -999 });
-  const landingSmooth = useRef({ x: -999, y: -999 });
-  const landingRafRef = useRef(0);
-  const [landingCursor, setLandingCursor] = useState({ x: -999, y: -999 });
+  const landingScrollRafRef = useRef(0);
   const [focusedField, setFocusedField] = useState("");
   const isAdmin = loginKind === "admin";
   const authMode = isAdmin ? "admin" : mode === "register" ? "register" : "login";
@@ -2036,19 +2375,49 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
     setPassword("");
   }, [isAdmin]);
 
+  const syncLandingScrollMotion = useCallback((element = landingRef.current) => {
+    if (!element) return;
+    const maxScroll = Math.max(element.scrollHeight - element.clientHeight, 1);
+    const progress = Math.max(0, Math.min(1, element.scrollTop / maxScroll));
+    const marquee = element.querySelector(".landing-knowledge-marquee");
+    const marqueeTop = marquee?.offsetTop ?? element.clientHeight;
+    const marqueeOffset = (element.scrollTop - marqueeTop + element.clientHeight) * 0.3;
+    element.style.setProperty("--scroll-progress", progress.toFixed(4));
+    element.style.setProperty("--marquee-forward", `${marqueeOffset - 200}px`);
+    element.style.setProperty("--marquee-reverse", `${200 - marqueeOffset}px`);
+  }, []);
+
+  const scheduleLandingScrollMotion = useCallback((element = landingRef.current) => {
+    if (!element) return;
+    if (landingScrollRafRef.current) cancelAnimationFrame(landingScrollRafRef.current);
+    landingScrollRafRef.current = requestAnimationFrame(() => {
+      syncLandingScrollMotion(element);
+      landingScrollRafRef.current = 0;
+    });
+  }, [syncLandingScrollMotion]);
+
   useEffect(() => {
     if (showLogin) return undefined;
 
-    function animateCursor() {
-      landingSmooth.current.x += (landingMouse.current.x - landingSmooth.current.x) * 0.1;
-      landingSmooth.current.y += (landingMouse.current.y - landingSmooth.current.y) * 0.1;
-      setLandingCursor({ x: landingSmooth.current.x, y: landingSmooth.current.y });
-      landingRafRef.current = requestAnimationFrame(animateCursor);
+    const element = landingRef.current;
+    syncLandingScrollMotion(element);
+
+    function onScroll(event) {
+      scheduleLandingScrollMotion(event.currentTarget);
     }
 
-    landingRafRef.current = requestAnimationFrame(animateCursor);
-    return () => cancelAnimationFrame(landingRafRef.current);
-  }, [showLogin]);
+    function onResize() {
+      scheduleLandingScrollMotion(element);
+    }
+
+    element?.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize, { passive: true });
+    return () => {
+      element?.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+      if (landingScrollRafRef.current) cancelAnimationFrame(landingScrollRafRef.current);
+    };
+  }, [scheduleLandingScrollMotion, showLogin, syncLandingScrollMotion]);
 
   function chooseAuthMode(nextMode) {
     setError("");
@@ -2082,21 +2451,33 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
     const rect = element.getBoundingClientRect();
     const x = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
     const y = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
-    landingMouse.current = { x: event.clientX, y: event.clientY };
+    const heroScreen = element.querySelector(".landing-hero-screen");
     element.style.setProperty("--mx", x.toFixed(3));
     element.style.setProperty("--my", y.toFixed(3));
     element.style.setProperty("--mouse-x", `${((event.clientX - rect.left) / rect.width) * 100}%`);
     element.style.setProperty("--mouse-y", `${((event.clientY - rect.top) / rect.height) * 100}%`);
+    element.style.setProperty("--reveal-opacity", "1");
+    heroScreen?.style.setProperty("--mx", x.toFixed(3));
+    heroScreen?.style.setProperty("--my", y.toFixed(3));
+    heroScreen?.style.setProperty("--mouse-x", `${((event.clientX - rect.left) / rect.width) * 100}%`);
+    heroScreen?.style.setProperty("--mouse-y", `${((event.clientY - rect.top) / rect.height) * 100}%`);
+    heroScreen?.style.setProperty("--reveal-opacity", "1");
   }
 
   function resetLandingPointer() {
     const element = landingRef.current;
-    landingMouse.current = { x: -999, y: -999 };
     if (!element) return;
+    const heroScreen = element.querySelector(".landing-hero-screen");
     element.style.setProperty("--mx", "0");
     element.style.setProperty("--my", "0");
     element.style.setProperty("--mouse-x", "50%");
     element.style.setProperty("--mouse-y", "50%");
+    element.style.setProperty("--reveal-opacity", "0");
+    heroScreen?.style.setProperty("--mx", "0");
+    heroScreen?.style.setProperty("--my", "0");
+    heroScreen?.style.setProperty("--mouse-x", "50%");
+    heroScreen?.style.setProperty("--mouse-y", "50%");
+    heroScreen?.style.setProperty("--reveal-opacity", "0");
   }
 
   function handleLoginPointerMove(event) {
@@ -2119,36 +2500,156 @@ function LoginScreenV2({ onAuthed, onContinue, savedSession, status }) {
   if (!showLogin) {
     return (
       <main className="landing-shell" ref={landingRef} onPointerMove={handleLandingPointerMove} onPointerLeave={resetLandingPointer}>
-        <div className="landing-image-bg hero-zoom" />
-        <LandingRevealLayer image="/images/workspace-tcm-vivid-bg.png" cursorX={landingCursor.x} cursorY={landingCursor.y} />
-        <div className="landing-paper" />
-        <div className="landing-mist" aria-hidden="true">
-          <span className="mist mist-a" />
-          <span className="mist mist-b" />
-          <span className="mist mist-c" />
-        </div>
-        <div className="landing-graph" aria-hidden="true">
-          <span className="node node-a" />
-          <span className="node node-b" />
-          <span className="node node-c" />
-          <span className="node node-d" />
-          <i className="line line-a" />
-          <i className="line line-b" />
-          <i className="line line-c" />
-          <span className="spark spark-a" />
-          <span className="spark spark-b" />
-          <span className="spark spark-c" />
-        </div>
-        <button className="landing-login-button" type="button" onClick={() => setShowLogin(true)}>{"登录"}</button>
-        <section className="landing-hero" aria-label="中医图谱入口">
-          <p className="hero-anim hero-fade" style={{ animationDelay: "0.18s" }}>{"药图"}</p>
-          <h1>
-            <span className="hero-anim hero-reveal" style={{ animationDelay: "0.25s" }}>{"药图"}</span>
-          </h1>
-          <strong className="hero-anim hero-fade" style={{ animationDelay: "0.68s" }}>{"方药知识 · 图谱证据 · 智能问答"}</strong>
+        <section className="landing-hero-screen" aria-label="药图首页">
+          <div className="landing-image-bg hero-zoom" />
+          <LandingRevealLayer image="/images/workspace-tcm-vivid-bg.png" />
+          <div className="landing-paper" />
+          <div className="landing-mist" aria-hidden="true">
+            <span className="mist mist-a" />
+            <span className="mist mist-b" />
+            <span className="mist mist-c" />
+          </div>
+          <div className="landing-graph" aria-hidden="true">
+            <span className="node node-a" />
+            <span className="node node-b" />
+            <span className="node node-c" />
+            <span className="node node-d" />
+            <i className="line line-a" />
+            <i className="line line-b" />
+            <i className="line line-c" />
+            <span className="spark spark-a" />
+            <span className="spark spark-b" />
+            <span className="spark spark-c" />
+          </div>
+          <button className="landing-login-button" type="button" onClick={() => setShowLogin(true)}>{"登录"}</button>
+          <section className="landing-hero" aria-label="中医图谱入口">
+            <p className="hero-anim hero-fade" style={{ animationDelay: "0.18s" }}>{"药图"}</p>
+            <h1>
+              <span className="hero-anim hero-reveal" style={{ animationDelay: "0.25s" }}>{"药图"}</span>
+            </h1>
+            <strong className="hero-anim hero-fade" style={{ animationDelay: "0.68s" }}>{"方药知识 · 图谱证据 · 智能问答"}</strong>
+          </section>
+          <section className="landing-copy-left hero-anim hero-fade" style={{ animationDelay: "0.78s" }}>
+            {"每一味药材都藏着性味、归经、功效与方剂之间的线索，沿着图谱脉络逐层显影。"}
+          </section>
+          <div className="landing-scroll-cue hero-anim hero-fade" style={{ animationDelay: "0.96s" }} aria-hidden="true">
+            <span />
+            <strong>{"下拉识方药"}</strong>
+          </div>
         </section>
-        <section className="landing-copy-left hero-anim hero-fade" style={{ animationDelay: "0.78s" }}>
-          {"每一味药材都藏着性味、归经、功效与方剂之间的线索，沿着图谱脉络逐层显影。"}
+        <section className="landing-knowledge" aria-label="中医药知识导览">
+          <div className="knowledge-backdrop" aria-hidden="true">
+            <span className="knowledge-orbit orbit-a" />
+            <span className="knowledge-orbit orbit-b" />
+            <span className="knowledge-thread thread-a" />
+            <span className="knowledge-thread thread-b" />
+          </div>
+          <section className="knowledge-network-screen">
+            <div className="knowledge-intro">
+              <span>{"知识序章"}</span>
+              <DynamicSplitText text={landingSplitTitle} className="knowledge-intro-title" />
+              <button className="landing-explore-button" type="button" onClick={() => setShowLogin(true)}>
+                <span>{"登录探索"}</span>
+                <ChevronRight size={22} />
+              </button>
+            </div>
+          </section>
+          <section className="landing-knowledge-marquee" aria-label="中医药知识流">
+            {landingKnowledgeFlowRows.map((row, rowIndex) => (
+              <div
+                className={["knowledge-marquee-row", rowIndex === 1 ? "reverse" : ""].filter(Boolean).join(" ")}
+                key={row.map((item) => item.title).join("-")}
+                style={{ "--marquee-shift": rowIndex === 1 ? "var(--marquee-reverse, 120px)" : "var(--marquee-forward, -120px)" }}
+              >
+                {[...row, ...row, ...row].map((item, itemIndex) => (
+                  <figure className="knowledge-marquee-tile" key={`${item.title}-${itemIndex}`}>
+                    <img src={item.image} alt="" loading="lazy" />
+                    <figcaption>
+                      <strong>{item.title}</strong>
+                      <span>{item.subtitle}</span>
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            ))}
+          </section>
+          <section className="knowledge-about-section">
+            <span>{"资料如何被理解"}</span>
+            <PressureText text={landingPressureTitle} className="knowledge-notes-title" />
+            <p aria-label={landingAnimatedStatement}>
+              {landingAnimatedStatement.split("").map((char, index) => (
+                <span
+                  className="knowledge-char"
+                  key={`${char}-${index}`}
+                  style={{
+                    "--char-index": index,
+                    "--char-total": landingAnimatedStatement.length,
+                  }}
+                >
+                  {char === " " ? "\u00A0" : char}
+                </span>
+              ))}
+            </p>
+          </section>
+          <section className="knowledge-steps">
+            <div className="knowledge-steps-heading">
+              <span>{"系统能力"}</span>
+              <ProximityText text={landingProximityTitle} className="knowledge-steps-title" />
+            </div>
+            {landingKnowledgeSteps.map((step, index) => (
+              <article className="knowledge-step" key={step.number} style={{ "--step-index": index }}>
+                <div className="step-marker">
+                  <span>{step.number}</span>
+                </div>
+                <div className="step-copy">
+                  <h3>{step.title}</h3>
+                  <p>{step.lead}</p>
+                  <ul>
+                    {step.facts.map((fact) => <li key={fact}>{fact}</li>)}
+                  </ul>
+                </div>
+              </article>
+            ))}
+          </section>
+          <section className="materia-section" aria-label="中医药知识案例">
+            <CursorTrailText text="方药" className="materia-trail-zone">
+              <div className="materia-copy">
+                <span>{"资料案例"}</span>
+                <h2 className="materia-trail-title">{landingTrailTitle}</h2>
+              </div>
+            </CursorTrailText>
+            <div className="materia-projects">
+              {landingMateriaCards.map((item, index) => (
+                <article className="materia-project-card" key={item.name} style={{ "--project-index": index }}>
+                  <div className="project-card-top">
+                    <strong>{item.number}</strong>
+                    <span>{item.label}</span>
+                    <h3>{item.name}</h3>
+                    <button className="landing-explore-button ghost" type="button" onClick={() => setShowLogin(true)}>
+                      <span>{"进入系统"}</span>
+                      <ChevronRight size={20} />
+                    </button>
+                  </div>
+                  <p>{item.detail}</p>
+                  <div className="project-image-grid" aria-hidden="true">
+                    <div>
+                      <img src={item.images[0]} alt="" loading="lazy" />
+                      <img src={item.images[1]} alt="" loading="lazy" />
+                    </div>
+                    <img src={item.images[2]} alt="" loading="lazy" />
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+          <section className="landing-final-cta">
+            <span>{"准备进入完整系统"}</span>
+            <GlitchText text={landingGlitchTitle} className="landing-final-title" />
+            <button className="landing-explore-button final" type="button" onClick={() => setShowLogin(true)}>
+              <span>{"登录探索"}</span>
+              <ChevronRight size={22} />
+            </button>
+          </section>
         </section>
       </main>
     );
