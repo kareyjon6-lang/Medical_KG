@@ -28,7 +28,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import {
   adminLogin,
@@ -170,6 +170,8 @@ const demoResults = [
 const hotQueries = ["麻黄汤", "桂枝汤", "银翘散", "四君子汤", "发汗解表", "风寒表实证"];
 const SEARCH_RESULT_LIMIT = 3000;
 const relationFilters = ["HAS_INGREDIENT", "HAS_EFFECT", "FROM_SOURCE", "ALLEVIATES_SYMPTOM", "TREATS_DISEASE"];
+const SEARCH_RESULT_ESTIMATED_HEIGHT = 228;
+const SEARCH_RESULT_OVERSCAN = 720;
 
 const authRuntime = {
   token: "",
@@ -1636,29 +1638,13 @@ function SearchPanel(props) {
         </div>
         <div className="result-list">
           {loading && <SearchSkeleton />}
-          {!loading && results.map((item) => (
-            <button
-              type="button"
-              className={selectedResult?.id === item.id ? "result-card active" : "result-card"}
-              key={item.id}
-              onClick={() => onSelectResult(item)}
-            >
-              <div className="result-title">
-                <span className={["entity-chip", item.label].join(" ")}>{entityLabel(item.label)}</span>
-                <h2>{item.name}</h2>
-                <ChevronRight size={18} />
-              </div>
-              <dl>
-                {searchCardKeysFor(item).map((key) => item.properties?.[key] ? (
-                  <div key={key}>
-                    <dt>{propertyLabel(key)}</dt>
-                    <dd>{String(item.properties[key])}</dd>
-                  </div>
-                ) : null)}
-              </dl>
-              <p className="relation-count">{countRelated(item)} {"条关系"}</p>
-            </button>
-          ))}
+          {!loading && results.length > 0 && (
+            <VirtualizedSearchResults
+              items={results}
+              selectedResult={selectedResult}
+              onSelectResult={onSelectResult}
+            />
+          )}
           {!results.length && !loading && <p className="empty-note">{"暂无匹配结果，请更换关键词或清空筛选。"}</p>}
         </div>
       </section>
@@ -1703,6 +1689,164 @@ function SearchPanel(props) {
     </div>
   );
 }
+
+function VirtualizedSearchResults({ items, selectedResult, onSelectResult }) {
+  const containerRef = useRef(null);
+  const itemRefs = useRef(new Map());
+  const itemHeightsRef = useRef(new Map());
+  const observersRef = useRef(new Map());
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [measureVersion, setMeasureVersion] = useState(0);
+
+  useEffect(() => {
+    itemHeightsRef.current.clear();
+    setScrollTop(0);
+    setMeasureVersion((value) => value + 1);
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
+    }
+  }, [items]);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+
+    function updateViewport() {
+      setViewportHeight(container.clientHeight || 0);
+    }
+
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
+
+  const metrics = useMemo(() => {
+    const positions = new Array(items.length);
+    let offset = 0;
+    for (let index = 0; index < items.length; index += 1) {
+      positions[index] = offset;
+      offset += itemHeightsRef.current.get(index) || SEARCH_RESULT_ESTIMATED_HEIGHT;
+    }
+    return {
+      positions,
+      totalHeight: offset,
+    };
+  }, [items, measureVersion]);
+
+  const visibleRange = useMemo(() => {
+    if (!items.length) {
+      return { startIndex: 0, endIndex: -1 };
+    }
+    const startOffset = Math.max(0, scrollTop - SEARCH_RESULT_OVERSCAN);
+    const endOffset = scrollTop + Math.max(viewportHeight, SEARCH_RESULT_ESTIMATED_HEIGHT) + SEARCH_RESULT_OVERSCAN;
+    let startIndex = 0;
+    while (
+      startIndex < items.length &&
+      metrics.positions[startIndex] + (itemHeightsRef.current.get(startIndex) || SEARCH_RESULT_ESTIMATED_HEIGHT) < startOffset
+    ) {
+      startIndex += 1;
+    }
+    let endIndex = startIndex;
+    while (endIndex + 1 < items.length && metrics.positions[endIndex + 1] < endOffset) {
+      endIndex += 1;
+    }
+    return { startIndex, endIndex };
+  }, [items, metrics.positions, scrollTop, viewportHeight]);
+
+  const measureNode = useCallback((index, node) => {
+    if (!node) return;
+    const height = Math.ceil(node.getBoundingClientRect().height);
+    const currentHeight = itemHeightsRef.current.get(index);
+    if (height > 0 && currentHeight !== height) {
+      itemHeightsRef.current.set(index, height);
+      setMeasureVersion((value) => value + 1);
+    }
+  }, []);
+
+  const bindItemRef = useCallback((index) => (node) => {
+    const previous = itemRefs.current.get(index);
+    if (previous && previous !== node) {
+      const previousObserver = observersRef.current.get(index);
+      previousObserver?.disconnect();
+      observersRef.current.delete(index);
+      itemRefs.current.delete(index);
+    }
+
+    if (!node) {
+      return;
+    }
+
+    itemRefs.current.set(index, node);
+    measureNode(index, node);
+
+    if ("ResizeObserver" in window) {
+      const observer = new ResizeObserver(() => measureNode(index, node));
+      observer.observe(node);
+      observersRef.current.get(index)?.disconnect();
+      observersRef.current.set(index, observer);
+    }
+  }, [measureNode]);
+
+  useEffect(() => () => {
+    observersRef.current.forEach((observer) => observer.disconnect());
+    observersRef.current.clear();
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="result-list-virtualized"
+      onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+    >
+      <div className="result-list-virtualized-inner" style={{ height: `${metrics.totalHeight}px` }}>
+        {items.slice(visibleRange.startIndex, visibleRange.endIndex + 1).map((item, offsetIndex) => {
+          const index = visibleRange.startIndex + offsetIndex;
+          return (
+            <div
+              key={item.id}
+              className="result-list-row"
+              style={{ transform: `translateY(${metrics.positions[index]}px)` }}
+            >
+              <SearchResultCard
+                item={item}
+                isActive={selectedResult?.id === item.id}
+                onSelectResult={onSelectResult}
+                ref={bindItemRef(index)}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const SearchResultCard = forwardRef(function SearchResultCard({ item, isActive, onSelectResult }, ref) {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={isActive ? "result-card active" : "result-card"}
+      onClick={() => onSelectResult(item)}
+    >
+      <div className="result-title">
+        <span className={["entity-chip", item.label].join(" ")}>{entityLabel(item.label)}</span>
+        <h2>{item.name}</h2>
+        <ChevronRight size={18} />
+      </div>
+      <dl>
+        {searchCardKeysFor(item).map((key) => item.properties?.[key] ? (
+          <div key={key}>
+            <dt>{propertyLabel(key)}</dt>
+            <dd>{String(item.properties[key])}</dd>
+          </div>
+        ) : null)}
+      </dl>
+      <p className="relation-count">{countRelated(item)} {"条关系"}</p>
+    </button>
+  );
+});
 
 function GraphPanel(props) {
   const { graphData, rawGraph, graphFocus, setGraphFocus, graphDepth, setGraphDepth, activeRelations, switchRelation, selectedNode, setSelectedNode, hasWebGL, graphRef, loading } = props;
