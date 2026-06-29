@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from __005__fastapi.app.services.knowledge_import_service import (
+    FormulaAlreadyExistsError,
     FormulaNotFoundError,
     build_preview_graph,
     delete_formula_from_neo4j,
@@ -50,6 +51,14 @@ def test_extract_herb_knowledge_requires_herb_name():
 
     with pytest.raises(ValueError, match="药材名称"):
         extract_herb_knowledge("艾叶具有温经止血的功效。", llm=FakeLlm())
+
+
+def test_extract_herb_knowledge_keeps_short_bare_entity_name_without_guessing_other_entity():
+    payload = extract_herb_knowledge("阿胶囊")
+
+    assert payload["herb"]["name"] == "阿胶囊"
+    assert payload["herb"]["label"] == "Formula"
+    assert payload["relations"] == []
 
 
 def test_extract_herb_knowledge_parses_structured_crawler_text_without_llm():
@@ -153,6 +162,75 @@ def test_extract_real_formula_style_text_keeps_rich_relationships_without_llm():
     assert [relation["object"] for relation in relations if relation["relation"] == "FROM_SOURCE"] == ["通俗伤寒论"]
 
 
+def test_structured_herb_document_keeps_herb_label_even_if_text_mentions_formula_sections():
+    class FailingLlm:
+        def invoke(self, _messages):
+            raise AssertionError("显式中药栏目应当走结构化抽取")
+
+    payload = extract_herb_knowledge(
+        """
+        【中药名称】阿胶
+        来源
+        为马科动物驴的皮去毛后熬制而成的胶块。
+        组成
+        驴皮胶块。
+        功用
+        滋阴润燥，补血止血。
+        主治
+        血虚咳嗽。
+        """,
+        llm=FailingLlm(),
+    )
+
+    assert payload["herb"]["name"] == "阿胶"
+    assert payload["herb"]["label"] == "Herb"
+
+
+def test_structured_section_split_stops_when_next_heading_is_inline():
+    class FailingLlm:
+        def invoke(self, _messages):
+            raise AssertionError("结构化栏目应当直接解析")
+
+    payload = extract_herb_knowledge(
+        """
+        【中药名称】阿胶
+        功效
+        滋阴润燥，补血止血。
+        主治血虚咳嗽，吐血。
+        归经
+        入肺经、肝经。
+        """,
+        llm=FailingLlm(),
+    )
+
+    assert payload["herb"]["effect"] == "滋阴润燥，补血止血。"
+    assert payload["herb"]["indication"] == "血虚咳嗽，吐血。"
+
+
+def test_extract_herb_knowledge_rejects_llm_subject_that_is_not_grounded_in_source():
+    class FakeLlm:
+        def invoke(self, _messages):
+            return SimpleNamespace(content='{"herb":{"name":"阿胶","label":"Herb"},"relations":[]}')
+
+    with pytest.raises(ValueError, match="输入资料不一致"):
+        extract_herb_knowledge("本品为胶囊制剂，适用于日常调理。", llm=FakeLlm())
+
+
+def test_import_knowledge_to_neo4j_rejects_placeholder_entity_name():
+    class FakeNeo4j:
+        def run_cypher(self, *_args, **_kwargs):
+            return []
+
+    with pytest.raises(ValueError, match="编码损坏"):
+        import_knowledge_to_neo4j(
+            FakeNeo4j(),
+            {
+                "herb": {"name": "??", "label": "Herb"},
+                "relations": [],
+            },
+        )
+
+
 def test_delete_formula_from_neo4j_uses_exact_formula_or_herb_match(monkeypatch):
     class FakeNeo4j:
         def __init__(self):
@@ -206,6 +284,9 @@ def test_import_knowledge_updates_runtime_index_incrementally(monkeypatch):
         def __init__(self):
             self.queries = []
 
+        def run_cypher(self, query, parameters=None):
+            return []
+
         def run_multiple_cypher(self, queries):
             self.queries = queries
 
@@ -231,3 +312,22 @@ def test_import_knowledge_updates_runtime_index_incrementally(monkeypatch):
     assert len(fake.queries) == 5
     assert refreshed == [fake]
     assert {"阿胶鸡子黄汤", "阿胶", "养血滋阴"}.issubset(set(appended))
+
+
+def test_import_knowledge_rejects_duplicate_formula_or_herb(monkeypatch):
+    class FakeNeo4j:
+        def run_cypher(self, query, parameters=None):
+            if "RETURN n.name AS name" in query:
+                return [{"name": "阿胶", "labels": ["Herb"]}]
+            return []
+
+        def run_multiple_cypher(self, queries):
+            raise AssertionError("重复实体不应继续写入 Neo4j")
+
+    monkeypatch.setattr("__005__fastapi.app.services.knowledge_import_service.refresh_graph_metadata", lambda _client: None)
+    monkeypatch.setattr("__005__fastapi.app.services.knowledge_import_service.append_entities_to_runtime_index", lambda _names: 0)
+
+    with pytest.raises(FormulaAlreadyExistsError) as exc_info:
+        import_knowledge_to_neo4j(FakeNeo4j(), {"herb": {"name": "阿胶", "label": "Herb"}, "relations": []})
+
+    assert exc_info.value.name == "阿胶"

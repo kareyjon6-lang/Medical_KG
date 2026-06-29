@@ -70,8 +70,12 @@ async def semantic_transcription_node(state: AgentState, config: RunnableConfig 
 """
 
     # 调用大模型
-    response = await llm_ainvoke([HumanMessage(content=prompt)])
-    result = response.content.strip()
+    try:
+        response = await llm_ainvoke([HumanMessage(content=prompt)])
+        result = response.content.strip()
+    except Exception as exc:
+        print(f"语义转写失败，回退原始输入: {exc}")
+        result = user_input.strip()
 
     # 保存语义转写结果
     state["input_semantic_trans"] = result

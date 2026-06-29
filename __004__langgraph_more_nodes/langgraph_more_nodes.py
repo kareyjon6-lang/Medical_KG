@@ -90,11 +90,14 @@ def build_graph():
 
 graph = build_graph()
 
-async def zhongyi_response(input: str, user_id: str):
+async def zhongyi_response(input: str, user_id: str, history_messages=None):
     config = RunnableConfig(configurable={
         "thread_id": user_id
     })
-    result = await graph.ainvoke({"input": input, "runtime_thread_id": user_id}, config=config)
+    initial_state = {"input": input, "runtime_thread_id": user_id}
+    if history_messages is not None:
+        initial_state["history_messages"] = history_messages
+    result = await graph.ainvoke(initial_state, config=config)
     return result["output"]
 
 

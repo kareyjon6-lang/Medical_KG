@@ -10,6 +10,57 @@ from common.llm import llm_astream
 import json
 
 
+def _collect_graph_reference_items(cypher_results):
+    herbs = []
+    formulas = []
+    effects = []
+    usages = []
+    for item in cypher_results or []:
+        for row in item.get("result", []) or []:
+            herb_name = str(row.get("herb") or "").strip()
+            formula_name = str(row.get("formula") or "").strip()
+            effect = str(row.get("effect") or "").strip()
+            usage = str(row.get("usage") or "").strip()
+            if herb_name and herb_name not in herbs:
+                herbs.append(herb_name)
+            if formula_name and formula_name not in formulas:
+                formulas.append(formula_name)
+            if effect and effect not in effects:
+                effects.append(effect)
+            if usage and usage not in usages:
+                usages.append(usage)
+    return herbs[:5], formulas[:5], effects[:5], usages[:3]
+
+
+def _build_local_graph_answer(user_input: str, cypher_results) -> str:
+    herbs, formulas, effects, usages = _collect_graph_reference_items(cypher_results)
+    lines = [
+        "### 1. 当前建议",
+        f"针对“{user_input}”这类症状，建议先避免久坐久站和突然负重，注意腰腹部保暖，可先做短时休息和热敷观察。",
+        "",
+        "### 2. 需要尽快就医的情况",
+        "- 如果疼痛剧烈、持续加重，或伴随下肢麻木无力、发热、外伤、大小便异常，请及时到正规医院就诊。",
+        "- 如果症状反复出现，也建议尽快到正规医院或中医门诊辨证处理。",
+        "",
+        "### 3. 图谱关联信息（仅供参考，请勿自行抓药）",
+    ]
+    if effects:
+        lines.append(f"- 关联功效：{'；'.join(effects)}")
+    if herbs:
+        lines.append(f"- 关联药材：{'、'.join(herbs)}")
+    if formulas:
+        lines.append(f"- 关联方剂：{'、'.join(formulas)}")
+    if usages:
+        lines.append(f"- 图谱记录用法：{'；'.join(usages)}")
+    if not any((effects, herbs, formulas, usages)):
+        lines.append("- 当前图谱结果里没有命中到足够的药材或方剂信息。")
+    lines.extend([
+        "",
+        "请注意：中药和方剂需要辨证论治，个体差异较大，不建议仅凭这条信息自行用药。",
+    ])
+    return "\n".join(lines)
+
+
 async def neo4j_answer_generate_node(state: AgentState, config: RunnableConfig | None = None) -> AgentState:
     # 获取用户ID
     user_id = get_thread_id(config, state)
@@ -64,10 +115,16 @@ async def neo4j_answer_generate_node(state: AgentState, config: RunnableConfig |
     # print(prompt)
 
     model_answer = ""
-    async for chunk in llm_astream([HumanMessage(content=prompt)]):
-        print(chunk.content, end="", flush=True)
-        await put_stream_text_to_msg(user_id, chunk.content)
-        model_answer += chunk.content
+    try:
+        async for chunk in llm_astream([HumanMessage(content=prompt)]):
+            print(chunk.content, end="", flush=True)
+            await put_stream_text_to_msg(user_id, chunk.content)
+            model_answer += chunk.content
+    except Exception as exc:
+        print(f"图谱答案生成失败，使用本地兜底回答: {exc}")
+        await put_think_text_to_msg(user_id, "图谱回答生成失败，使用本地兜底回答")
+        model_answer = _build_local_graph_answer(user_input, cypher_results)
+        await put_stream_text_to_msg(user_id, model_answer)
 
 
     # 保存结果
@@ -79,5 +136,4 @@ async def neo4j_answer_generate_node(state: AgentState, config: RunnableConfig |
     await put_think_text_to_msg(user_id, "完成生成基于知识图谱的回答")
 
     return state
-
 

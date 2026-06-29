@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 
 import pytest
@@ -180,7 +181,7 @@ def test_chat_thread_routes_and_process_thread_storage(monkeypatch, tmp_path):
     assert messages[1]["content"] == "麻黄汤禁忌包括表虚自汗。"
 
 
-def test_chat_job_endpoint_uses_job_id_as_graph_queue_key(monkeypatch, tmp_path):
+def test_chat_job_endpoint_uses_thread_id_as_graph_queue_key(monkeypatch, tmp_path):
     main = load_main_with_sqlite(monkeypatch, tmp_path)
     client = TestClient(main.app)
     seen_graph_thread_ids = []
@@ -204,8 +205,7 @@ def test_chat_job_endpoint_uses_job_id_as_graph_queue_key(monkeypatch, tmp_path)
     assert response.status_code == 200
     assert "job 隔离回答" in response.text
     job_id = response.text.split('"job_id": "')[1].split('"', 1)[0]
-    assert seen_graph_thread_ids == [job_id]
-    assert job_id != thread["id"]
+    assert seen_graph_thread_ids == [thread["id"]]
     job = client.get(f"/api/chat/jobs/{job_id}", headers=headers).json()["job"]
     assert job["thread_id"] == thread["id"]
     assert job["status"] == "done"
@@ -265,6 +265,69 @@ def test_same_thread_new_job_cancels_previous_active_job_but_other_threads_keep_
     assert response.status_code == 200
     assert main.memory_store.get_chat_job(auth["user"]["id"], first_job["id"])["status"] == "cancelled"
     assert main.memory_store.get_chat_job(auth["user"]["id"], second_job["id"])["status"] == "running"
+
+
+def test_chat_jobs_reuse_thread_id_and_pass_prior_history_to_graph(monkeypatch, tmp_path):
+    main = load_main_with_sqlite(monkeypatch, tmp_path)
+    client = TestClient(main.app)
+    auth = client.post("/api/auth/register", json={"username": "history_user", "password": "secret123"}).json()
+    headers = {"Authorization": f"Bearer {auth['token']}"}
+    thread = client.post("/api/chat/threads", json={"title": "上下文测试"}, headers=headers).json()["thread"]
+
+    main.memory_store.append_chat_message(auth["user"]["id"], auth["session_id"], "user", "我最近总是失眠", thread_id=thread["id"])
+    long_answer = "先说说还有哪些不舒服。" + ("这是上一轮回答内容。" * 40)
+    main.memory_store.append_chat_message(auth["user"]["id"], auth["session_id"], "assistant", long_answer, thread_id=thread["id"])
+    captured = {}
+
+    async def fake_legacy_task(input_text, runtime_thread_id):
+        captured["input"] = input_text
+        captured["runtime_thread_id"] = runtime_thread_id
+        captured["history"] = main._consume_pending_graph_history(runtime_thread_id)
+        await put_stream_text_to_msg(runtime_thread_id, "已读取上下文。")
+        await put_done_to_msg(runtime_thread_id)
+
+    monkeypatch.setattr(main, "_legacy_zhongyi_task", fake_legacy_task)
+
+    response = client.post(
+        "/api/chat/jobs",
+        json={"input": "我腰疼，我该怎么办", "thread_id": thread["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert captured["input"] == "我腰疼，我该怎么办"
+    assert captured["runtime_thread_id"] == thread["id"]
+    assert captured["history"][0] == {"role": "user", "content": "我最近总是失眠"}
+    assert captured["history"][1]["role"] == "assistant"
+    assert captured["history"][1]["content"].startswith("先说说还有哪些不舒服。")
+    assert captured["history"][1]["content"].endswith("...")
+    assert len(captured["history"][1]["content"]) <= main.CHAT_GRAPH_MESSAGE_CHAR_LIMIT + 3
+
+
+def test_chat_job_timeout_records_non_empty_error(monkeypatch, tmp_path):
+    main = load_main_with_sqlite(monkeypatch, tmp_path)
+    client = TestClient(main.app)
+    auth = client.post("/api/auth/register", json={"username": "timeout_user", "password": "secret123"}).json()
+    headers = {"Authorization": f"Bearer {auth['token']}"}
+    thread = client.post("/api/chat/threads", json={"title": "超时测试"}, headers=headers).json()["thread"]
+
+    async def timeout_legacy_task(input_text, user_id):
+        raise asyncio.TimeoutError()
+
+    monkeypatch.setattr(main, "_legacy_zhongyi_task", timeout_legacy_task)
+
+    response = client.post(
+        "/api/chat/jobs",
+        json={"input": "我腰疼，我该怎么办", "thread_id": thread["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert '"type": "error"' in response.text
+    job_id = response.text.split('"job_id": "')[1].split('"', 1)[0]
+    job = client.get(f"/api/chat/jobs/{job_id}", headers=headers).json()["job"]
+    assert job["status"] == "failed"
+    assert "TimeoutError" in job["error"]
 
 
 def test_cors_origins_include_deployed_frontend_env(monkeypatch, tmp_path):
@@ -402,3 +465,52 @@ def test_admin_knowledge_import_routes(monkeypatch, tmp_path):
     )
     assert rejected_doc.status_code == 400
     assert "docx" in str(rejected_doc.json()["detail"])
+
+
+def test_admin_knowledge_invalid_duplicate_or_missing_operations_do_not_write_logs(monkeypatch, tmp_path):
+    monkeypatch.setenv("TCM_ADMIN_USERNAME", "admin")
+    monkeypatch.setenv("TCM_ADMIN_PASSWORD", "admin123")
+    main = load_main_with_sqlite(monkeypatch, tmp_path)
+    client = TestClient(main.app)
+
+    def fake_extract(text):
+        return {"herb": {"name": "阿胶囊", "label": "Formula"}, "relations": []}
+
+    def fake_import(_neo4j_client, _payload):
+        raise main.FormulaAlreadyExistsError("阿胶囊", ["Formula"])
+
+    def fake_delete(_neo4j_client, _name):
+        raise main.FormulaNotFoundError("不存在实体")
+
+    monkeypatch.setattr(main, "extract_herb_knowledge", fake_extract)
+    monkeypatch.setattr(main, "import_knowledge_to_neo4j", fake_import)
+    monkeypatch.setattr(main, "delete_formula_from_neo4j", fake_delete)
+
+    admin = client.post("/api/auth/admin/login", json={"username": "admin", "password": "admin123"}).json()
+    admin_headers = {"Authorization": f"Bearer {admin['token']}"}
+
+    extracted = client.post(
+        "/api/admin/knowledge/extract",
+        data={"text": "阿胶囊"},
+        headers=admin_headers,
+    )
+    assert extracted.status_code == 200
+    assert extracted.json()["extracted"]["herb"]["name"] == "阿胶囊"
+
+    duplicate = client.post(
+        "/api/admin/knowledge/import",
+        json={"job_id": "", "extracted": extracted.json()["extracted"]},
+        headers=admin_headers,
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"]["message"] == "已经存在该实体"
+
+    missing = client.post(
+        "/api/admin/knowledge/delete",
+        json={"name": "不存在实体"},
+        headers=admin_headers,
+    )
+    assert missing.status_code == 404
+    assert missing.json()["detail"]["message"] == "没有该实体"
+
+    assert client.get("/api/admin/knowledge/imports", headers=admin_headers).json()["items"] == []

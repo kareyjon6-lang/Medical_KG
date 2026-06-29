@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import sqlite3
 from contextlib import contextmanager
@@ -10,6 +11,45 @@ from typing import Any, Dict, Iterable, List, Optional
 
 
 DEFAULT_DATABASE_URL = "sqlite:///data/app_memory.sqlite3"
+_PLACEHOLDER_ENTITY_NAME_RE = re.compile(r"^[?？\uFFFD\s]+$")
+
+
+def _is_placeholder_entity_name(value: Any) -> bool:
+    text = str(value or "").strip()
+    return bool(text) and bool(_PLACEHOLDER_ENTITY_NAME_RE.fullmatch(text))
+
+
+def _extract_entity_name_from_summary(summary: Any) -> str:
+    text = str(summary or "").strip()
+    if not text:
+        return ""
+    if text.startswith("删除方药："):
+        return text.split("：", 1)[1].strip()
+    try:
+        payload = json.loads(text)
+    except Exception:
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    herb = payload.get("herb", {}) if isinstance(payload.get("herb"), dict) else {}
+    deleted = payload.get("deleted", {}) if isinstance(payload.get("deleted"), dict) else {}
+    return str(herb.get("name") or deleted.get("name") or "").strip()
+
+
+def _resolve_knowledge_display_name(entity_name: Any, extracted_payload: Dict[str, Any], source_summary: Any = "") -> str:
+    herb = extracted_payload.get("herb", {}) if isinstance(extracted_payload, dict) else {}
+    deleted = extracted_payload.get("deleted", {}) if isinstance(extracted_payload, dict) else {}
+    candidates = [
+        entity_name,
+        herb.get("name") if isinstance(herb, dict) else "",
+        deleted.get("name") if isinstance(deleted, dict) else "",
+        _extract_entity_name_from_summary(source_summary),
+    ]
+    for candidate in candidates:
+        clean_name = str(candidate or "").strip()
+        if clean_name and not _is_placeholder_entity_name(clean_name):
+            return clean_name
+    return ""
 
 
 class PgMemoryStore:
@@ -685,12 +725,9 @@ class PgMemoryStore:
         error: str = "",
     ) -> Dict[str, Any]:
         clean_operation = operation_type if operation_type in {"add", "delete"} else "add"
-        clean_entity_name = str(entity_name or "").strip()
+        clean_entity_name = _resolve_knowledge_display_name(entity_name, extracted_payload, source_summary)
         if not clean_entity_name:
-            herb = extracted_payload.get("herb", {}) if isinstance(extracted_payload, dict) else {}
-            clean_entity_name = str(herb.get("name") or "").strip()
-        if not clean_entity_name:
-            raise ValueError("正式记录缺少方药名称。")
+            raise ValueError("正式记录缺少有效的方药名称。")
         now = datetime.now(timezone.utc).isoformat()
         job = {
             "id": secrets.token_hex(16),
@@ -1207,6 +1244,11 @@ class PgMemoryStore:
             extracted = json.loads(row.get("extracted_json") or "{}")
         except Exception:
             extracted = {}
+        display_name = _resolve_knowledge_display_name(
+            row.get("entity_name"),
+            extracted if isinstance(extracted, dict) else {},
+            row.get("source_summary"),
+        )
         return {
             "id": row["id"],
             "admin_id": row["admin_id"],
@@ -1215,7 +1257,9 @@ class PgMemoryStore:
             "source_summary": row.get("source_summary") or "",
             "extracted": extracted,
             "operation_type": row.get("operation_type") or "legacy",
-            "entity_name": row.get("entity_name") or extracted.get("herb", {}).get("name", ""),
+            "entity_name": display_name,
+            "display_name": display_name or "未知实体",
+            "name_issue": "placeholder" if not display_name else "",
             "is_committed": bool(int(row.get("is_committed") or 0)),
             "status": row.get("status") or "draft",
             "error": row.get("error") or "",

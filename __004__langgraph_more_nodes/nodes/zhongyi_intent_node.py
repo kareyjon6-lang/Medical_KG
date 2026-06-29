@@ -1,3 +1,5 @@
+import re
+
 from langchain_core.runnables import RunnableConfig
 from __004__langgraph_more_nodes.agent_state import AgentState
 from langchain_core.messages import HumanMessage
@@ -11,6 +13,26 @@ TCM_DIRECT_KEYWORDS = (
     "穴位", "艾灸", "针灸", "脉象", "舌苔", "症状", "本草", "伤寒论", "配伍",
 )
 TCM_FORMULA_SUFFIXES = ("汤", "丸", "散", "饮", "膏", "丹", "剂", "露")
+TCM_SYMPTOM_KEYWORDS = (
+    "头疼", "头痛", "腰疼", "腰痛", "胃疼", "胃痛", "腹痛", "肚子疼", "背痛", "肩痛",
+    "脖子痛", "咳嗽", "发烧", "发热", "失眠", "便秘", "腹泻", "恶心", "呕吐", "乏力",
+    "月经不调", "痛经", "鼻塞", "咽痛", "胸闷", "心慌", "上火",
+)
+TCM_HELP_HINTS = ("怎么办", "怎么缓解", "怎么调理", "怎么改善", "该怎么办", "该怎么调理", "怎么治")
+TCM_BODY_PAIN_PATTERN = re.compile(
+    r"(头|脑袋|腰|背|肩|脖子|颈|胃|腹|肚子|胸|喉咙|咽喉|牙|关节|膝盖|腿|脚|手|眼|耳).{0,2}(疼|痛|酸|胀|麻)"
+)
+
+
+def looks_like_tcm_symptom_question(text: str) -> bool:
+    clean_text = (text or "").strip()
+    if not clean_text:
+        return False
+    if TCM_BODY_PAIN_PATTERN.search(clean_text):
+        return True
+    if any(keyword in clean_text for keyword in TCM_SYMPTOM_KEYWORDS):
+        return True
+    return any(hint in clean_text for hint in TCM_HELP_HINTS) and any(token in clean_text for token in ("疼", "痛", "酸", "胀", "麻", "痒", "咳", "热"))
 
 
 def infer_tcm_intent_fast(text: str):
@@ -18,6 +40,8 @@ def infer_tcm_intent_fast(text: str):
     if not clean_text:
         return False
     if any(keyword in clean_text for keyword in TCM_DIRECT_KEYWORDS):
+        return True
+    if looks_like_tcm_symptom_question(clean_text):
         return True
     if "什么药" in clean_text or "吃什么" in clean_text or "怎么用药" in clean_text:
         return True
@@ -67,8 +91,14 @@ async def zhongyi_intent_node(state: AgentState, config: RunnableConfig | None =
     """
 
     # 调用大模型
-    response = await llm_ainvoke([HumanMessage(content=prompt)])
-    model_answer = response.content.strip()
+    try:
+        response = await llm_ainvoke([HumanMessage(content=prompt)])
+        model_answer = response.content.strip()
+    except Exception as exc:
+        print(f"中医意图识别调用失败，使用本地兜底判断: {exc}")
+        state["is_zhongyi_intent"] = looks_like_tcm_symptom_question(user_input)
+        await put_think_text_to_msg(user_id, f"完成识别中医意图：{'是' if state['is_zhongyi_intent'] else '否'}")
+        return state
 
     # 严格判断输出
     if model_answer == "是":

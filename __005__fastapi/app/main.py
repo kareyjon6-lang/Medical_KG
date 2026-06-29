@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +14,7 @@ from __005__fastapi.__003__msg_queue import put_done_to_msg, msg_queue_manager
 from __005__fastapi.app.services.auth_service import AuthError, AuthService
 from __005__fastapi.app.services.graph_service import build_knowledge_graph
 from __005__fastapi.app.services.knowledge_import_service import (
+    FormulaAlreadyExistsError,
     FormulaNotFoundError,
     build_preview_graph,
     delete_formula_from_neo4j,
@@ -36,7 +37,7 @@ def get_frontend_origins():
     return defaults + origins
 
 
-Config()
+conf = Config()
 app = FastAPI(title="中医知识图谱接口", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -48,6 +49,52 @@ app.add_middleware(
 memory_store = get_memory_store()
 auth_service = AuthService(memory_store)
 qa_cache_service = SharedQaCacheService(memory_store)
+CHAT_GRAPH_HISTORY_LIMIT = max(6, int(conf.HISTORY_NUM or 5) * 2)
+CHAT_GRAPH_MESSAGE_CHAR_LIMIT = 220
+_pending_graph_histories: Dict[str, List[Dict[str, str]]] = {}
+
+
+async def run_in_thread(func, *args, **kwargs):
+    if hasattr(asyncio, "to_thread"):
+        return await asyncio.to_thread(func, *args, **kwargs)
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
+
+
+def _remember_pending_graph_history(runtime_thread_id: str, history_messages: List[Dict[str, str]]) -> None:
+    _pending_graph_histories[str(runtime_thread_id or "")] = list(history_messages or [])
+
+
+def _consume_pending_graph_history(runtime_thread_id: str) -> List[Dict[str, str]]:
+    return list(_pending_graph_histories.pop(str(runtime_thread_id or ""), []))
+
+
+def _discard_pending_graph_history(runtime_thread_id: str) -> None:
+    _pending_graph_histories.pop(str(runtime_thread_id or ""), None)
+
+
+def _load_thread_history_for_graph(user_id: str, thread_id: Optional[str]) -> List[Dict[str, str]]:
+    if not thread_id:
+        return []
+    messages = memory_store.get_thread_messages(user_id, thread_id, limit=CHAT_GRAPH_HISTORY_LIMIT)
+    history_messages = []
+    for item in messages:
+        role = str(item.get("role") or "").strip()
+        content = str(item.get("content") or "").strip()
+        if role in {"user", "assistant"} and content:
+            if len(content) > CHAT_GRAPH_MESSAGE_CHAR_LIMIT:
+                content = f"{content[:CHAT_GRAPH_MESSAGE_CHAR_LIMIT].rstrip()}..."
+            history_messages.append({"role": role, "content": content})
+    return history_messages
+
+
+def _format_chat_job_error(exc: Exception) -> str:
+    if isinstance(exc, asyncio.TimeoutError):
+        return "TimeoutError: LLM 调用超时"
+    detail = str(exc or "").strip()
+    if detail:
+        return detail
+    return f"{exc.__class__.__name__}: 后端问答任务执行失败"
 
 
 class ChatRequest(BaseModel):
@@ -92,7 +139,7 @@ class KnowledgeDeleteRequest(BaseModel):
 @app.on_event("startup")
 async def warmup_runtime_models():
     try:
-        await asyncio.to_thread(memory_store.init_schema)
+        await run_in_thread(memory_store.init_schema)
         await qa_cache_service.ensure_seeded()
     except Exception as exc:
         print(f"数据库结构检查失败: {exc}")
@@ -100,7 +147,7 @@ async def warmup_runtime_models():
     try:
         from common.tcm_entity_extractor import extract_tcm_entities
 
-        await asyncio.to_thread(extract_tcm_entities, "模型预热")
+        await run_in_thread(extract_tcm_entities, "模型预热")
     except Exception as exc:
         print(f"实体抽取模型预热失败: {exc}")
 
@@ -108,11 +155,11 @@ async def warmup_runtime_models():
         from common.embedding_model import embedding_model
         from __004__langgraph_more_nodes.nodes import match_entity_from_neo4j_node as match_node
 
-        await asyncio.to_thread(embedding_model.encode, ["模型预热"], convert_to_numpy=True)
+        await run_in_thread(embedding_model.encode, ["模型预热"], convert_to_numpy=True)
         if getattr(match_node, "zhongyi_index", None) is None:
-            match_node.zhongyi_index = await asyncio.to_thread(match_node.load_index)
+            match_node.zhongyi_index = await run_in_thread(match_node.load_index)
         if getattr(match_node, "zhongyi_id2text", None) is None:
-            match_node.zhongyi_id2text = await asyncio.to_thread(match_node.load_id2text)
+            match_node.zhongyi_id2text = await run_in_thread(match_node.load_id2text)
     except Exception as exc:
         print(f"FAISS/embedding 预热失败: {exc}")
 
@@ -282,7 +329,7 @@ async def admin_extract_knowledge(
             source_text = parse_document_text(file.filename, await file.read())
         if not source_text:
             raise ValueError("请输入文本或上传 txt、md、pdf、docx 文档。")
-        extracted = await asyncio.to_thread(extract_herb_knowledge, source_text)
+        extracted = await run_in_thread(extract_herb_knowledge, source_text)
         preview_graph = build_preview_graph(extracted)
         return {
             "extracted": extracted,
@@ -301,7 +348,7 @@ async def admin_extract_knowledge(
 async def admin_import_knowledge(request: KnowledgeImportRequest, authorization: str = Header(default="")):
     admin = require_admin(authorization)
     try:
-        result = await asyncio.to_thread(import_knowledge_to_neo4j, neo4j_client, request.extracted)
+        result = await run_in_thread(import_knowledge_to_neo4j, neo4j_client, request.extracted)
         herb = request.extracted.get("herb", {}) if isinstance(request.extracted, dict) else {}
         job = memory_store.create_knowledge_operation_record(
             admin["id"],
@@ -312,6 +359,11 @@ async def admin_import_knowledge(request: KnowledgeImportRequest, authorization:
             source_summary=summarize_source_text(json.dumps(request.extracted, ensure_ascii=False)),
         )
         return {"status": "ok", "result": result, "job": job}
+    except FormulaAlreadyExistsError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "已经存在该实体", "name": exc.name, "labels": exc.labels},
+        ) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -320,7 +372,7 @@ async def admin_import_knowledge(request: KnowledgeImportRequest, authorization:
 async def admin_delete_knowledge(request: KnowledgeDeleteRequest, authorization: str = Header(default="")):
     admin = require_admin(authorization)
     try:
-        result = await asyncio.to_thread(delete_formula_from_neo4j, neo4j_client, request.name)
+        result = await run_in_thread(delete_formula_from_neo4j, neo4j_client, request.name)
         job = memory_store.create_knowledge_operation_record(
             admin["id"],
             "delete",
@@ -333,7 +385,7 @@ async def admin_delete_knowledge(request: KnowledgeDeleteRequest, authorization:
     except FormulaNotFoundError as exc:
         raise HTTPException(
             status_code=404,
-            detail={"message": str(exc), "suggestions": exc.suggestions},
+            detail={"message": "没有该实体", "name": exc.name, "suggestions": exc.suggestions},
         ) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -369,8 +421,12 @@ async def graph(
 async def _legacy_zhongyi_task(input_text, graph_thread_id):
     from __004__langgraph_more_nodes.langgraph_more_nodes import zhongyi_response
 
-    await zhongyi_response(input_text, graph_thread_id)
-    await put_done_to_msg(graph_thread_id)
+    history_messages = _consume_pending_graph_history(graph_thread_id)
+    try:
+        await zhongyi_response(input_text, graph_thread_id, history_messages=history_messages)
+        await put_done_to_msg(graph_thread_id)
+    finally:
+        _discard_pending_graph_history(graph_thread_id)
 
 
 def _run_legacy_zhongyi_task_in_worker(input_text, graph_thread_id):
@@ -420,9 +476,10 @@ def infer_progress_from_thought(message: str):
 async def generate_job_stream(input_text, user, thread_id=None, job_id=None):
     user_id = user["id"]
     session_id = user.get("session_id")
-    graph_thread_id = job_id or thread_id or user_id
+    graph_thread_id = thread_id or user_id
     assistant_chunks = []
     thoughts = []
+    history_messages = _load_thread_history_for_graph(user_id, thread_id)
 
     if job_id:
         memory_store.update_chat_job(user_id, job_id, status="running", progress=1)
@@ -452,8 +509,9 @@ async def generate_job_stream(input_text, user, thread_id=None, job_id=None):
     thought = "未命中共享问答缓存，进入知识图谱问答链路"
     thoughts.append(thought)
     yield stream_event("think", f"{thought}\n", 8, job_id=job_id, thread_id=thread_id)
+    _remember_pending_graph_history(graph_thread_id, history_messages)
     msg_queue = msg_queue_manager.get_msg_queue_by_user_id(graph_thread_id)
-    task = asyncio.create_task(asyncio.to_thread(_run_legacy_zhongyi_task_in_worker, input_text, graph_thread_id))
+    task = asyncio.create_task(run_in_thread(_run_legacy_zhongyi_task_in_worker, input_text, graph_thread_id))
 
     try:
         while True:
@@ -506,6 +564,7 @@ async def generate_job_stream(input_text, user, thread_id=None, job_id=None):
             )
     except asyncio.CancelledError:
         task.cancel()
+        _discard_pending_graph_history(graph_thread_id)
         msg_queue_manager.delete_msg_queue_by_user_id(graph_thread_id)
         if job_id:
             memory_store.update_chat_job(
@@ -516,13 +575,15 @@ async def generate_job_stream(input_text, user, thread_id=None, job_id=None):
             )
         raise
     except Exception as exc:
+        _discard_pending_graph_history(graph_thread_id)
         msg_queue_manager.delete_msg_queue_by_user_id(graph_thread_id)
+        error_text = _format_chat_job_error(exc)
         if job_id:
             memory_store.update_chat_job(
                 user_id,
                 job_id,
                 status="failed",
-                error=str(exc),
+                error=error_text,
                 finished_at=datetime.now(timezone.utc).isoformat(),
             )
         yield stream_event("error", CHAT_STREAM_ERROR_MESSAGE, 100, job_id=job_id, thread_id=thread_id)
@@ -584,7 +645,9 @@ async def cancel_chat_job(job_id: str, authorization: str = Header(default="")):
         status="cancelled",
         finished_at=datetime.now(timezone.utc).isoformat(),
     )
+    msg_queue_manager.delete_msg_queue_by_user_id(job.get("thread_id") or job_id)
     msg_queue_manager.delete_msg_queue_by_user_id(job_id)
+    _discard_pending_graph_history(job.get("thread_id") or job_id)
     return {"job": memory_store.get_chat_job(user["id"], job_id)}
 
 

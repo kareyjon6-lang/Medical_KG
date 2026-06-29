@@ -215,6 +215,47 @@ def test_knowledge_operation_records_roundtrip_and_prunes_legacy(tmp_path):
     assert [item["id"] for item in store.list_knowledge_import_jobs(admin["id"])] == [deleted["id"], added["id"]]
 
 
+def test_knowledge_operation_records_mask_placeholder_entity_name(tmp_path):
+    store = PgMemoryStore(f"sqlite:///{tmp_path / 'test.db'}")
+    store.init_schema()
+    admin = store.create_user("knowledge_admin", "secret123", role="admin")
+
+    with store._connect() as conn:
+        store._execute(
+            conn,
+            """
+            INSERT INTO knowledge_import_jobs (
+                id, admin_id, source_type, file_name, source_summary, extracted_json,
+                operation_type, entity_name, is_committed, status, error,
+                created_at, updated_at, finished_at
+            )
+            VALUES ({0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0})
+            """,
+            [
+                "bad-record",
+                admin["id"],
+                "manual",
+                "",
+                '{"herb": {"name": "??", "label": "Herb"}, "relations": []}',
+                '{"herb": {"name": "??", "label": "Herb"}, "relations": []}',
+                "add",
+                "??",
+                1,
+                "committed",
+                "",
+                "2026-06-28T13:01:37+00:00",
+                "2026-06-28T13:01:37+00:00",
+                "2026-06-28T13:01:37+00:00",
+            ],
+        )
+        store._commit(conn)
+
+    items = store.list_knowledge_import_jobs(admin["id"])
+    assert items[0]["entity_name"] == ""
+    assert items[0]["display_name"] == "未知实体"
+    assert items[0]["name_issue"] == "placeholder"
+
+
 def test_qa_cache_hit_count_extends_hot_generated_entries(tmp_path):
     store = PgMemoryStore(f"sqlite:///{tmp_path / 'test.db'}")
     store.init_schema()

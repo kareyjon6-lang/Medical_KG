@@ -30,3 +30,19 @@ def test_langgraph_llm_nodes_do_not_call_sync_llm_methods_directly():
 
         assert "my_llm.invoke" not in source, path
         assert "my_llm.stream" not in source, path
+
+
+def test_semantic_transcription_node_falls_back_to_raw_input_when_llm_fails():
+    source = (ROOT / "__004__langgraph_more_nodes" / "nodes" / "semantic_transcription_node.py").read_text(encoding="utf-8")
+
+    assert "except Exception as exc" in source
+    assert "语义转写失败，回退原始输入" in source
+    assert "result = user_input.strip()" in source
+
+
+def test_neo4j_answer_node_has_local_fallback_when_llm_fails():
+    source = (ROOT / "__004__langgraph_more_nodes" / "nodes" / "neo4j_answer_generate_node.py").read_text(encoding="utf-8")
+
+    assert "def _build_local_graph_answer" in source
+    assert "图谱答案生成失败，使用本地兜底回答" in source
+    assert "await put_stream_text_to_msg(user_id, model_answer)" in source

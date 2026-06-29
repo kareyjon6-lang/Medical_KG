@@ -90,12 +90,49 @@ function cloneKnowledgeDraft(draft = emptyKnowledgeDraft) {
   };
 }
 
+function isPlaceholderKnowledgeName(value) {
+  const text = String(value || "").trim();
+  return Boolean(text) && /^[?？\uFFFD\s]+$/.test(text);
+}
+
+function extractKnowledgeNameFromSummary(summary) {
+  const text = String(summary || "").trim();
+  if (!text) return "";
+  if (text.startsWith("删除方药：")) {
+    return text.split("：", 2)[1]?.trim() || "";
+  }
+  try {
+    const payload = JSON.parse(text);
+    return String(payload?.herb?.name || payload?.deleted?.name || "").trim();
+  } catch (error) {
+    return "";
+  }
+}
+
+function knowledgeHistoryDisplayName(item) {
+  const candidates = [
+    item?.display_name,
+    item?.entity_name,
+    item?.extracted?.herb?.name,
+    item?.extracted?.deleted?.name,
+    extractKnowledgeNameFromSummary(item?.source_summary),
+  ];
+  for (const candidate of candidates) {
+    const text = String(candidate || "").trim();
+    if (text && !isPlaceholderKnowledgeName(text)) {
+      return text;
+    }
+  }
+  return "未知实体";
+}
+
 const knowledgeRuntimeStore = {
   busy: false,
   deleteName: "",
   draft: cloneKnowledgeDraft(),
   file: null,
   jobId: "",
+  previewMode: "draft",
   previewGraph: { nodes: [], edges: [] },
   status: "等待录入药材资料",
   text: "",
@@ -108,6 +145,7 @@ function snapshotKnowledgeRuntime() {
     draft: cloneKnowledgeDraft(knowledgeRuntimeStore.draft),
     file: knowledgeRuntimeStore.file,
     jobId: knowledgeRuntimeStore.jobId,
+    previewMode: knowledgeRuntimeStore.previewMode,
     previewGraph: {
       nodes: [...(knowledgeRuntimeStore.previewGraph.nodes || [])],
       edges: [...(knowledgeRuntimeStore.previewGraph.edges || [])],
@@ -431,6 +469,7 @@ export default function Workbench({ initialView = "assistant" }) {
   const [knowledgeJobId, setKnowledgeJobId] = useState(knowledgeRuntimeSnapshot.jobId);
   const [knowledgeDeleteName, setKnowledgeDeleteName] = useState(knowledgeRuntimeSnapshot.deleteName);
   const [knowledgePreviewGraph, setKnowledgePreviewGraph] = useState(knowledgeRuntimeSnapshot.previewGraph);
+  const [knowledgePreviewMode, setKnowledgePreviewMode] = useState(knowledgeRuntimeSnapshot.previewMode);
   const [knowledgeImports, setKnowledgeImports] = useState([]);
   const [knowledgeStatus, setKnowledgeStatus] = useState(knowledgeRuntimeSnapshot.status);
   const [knowledgeBusy, setKnowledgeBusy] = useState(knowledgeRuntimeSnapshot.busy);
@@ -560,11 +599,12 @@ export default function Workbench({ initialView = "assistant" }) {
       draft: knowledgeDraft,
       file: knowledgeFile,
       jobId: knowledgeJobId,
+      previewMode: knowledgePreviewMode,
       previewGraph: knowledgePreviewGraph,
       status: knowledgeStatus,
       text: knowledgeText,
     });
-  }, [knowledgeBusy, knowledgeDeleteName, knowledgeDraft, knowledgeFile, knowledgeJobId, knowledgePreviewGraph, knowledgeStatus, knowledgeText]);
+  }, [knowledgeBusy, knowledgeDeleteName, knowledgeDraft, knowledgeFile, knowledgeJobId, knowledgePreviewGraph, knowledgePreviewMode, knowledgeStatus, knowledgeText]);
 
   useEffect(() => {
     if (!auth.token || activeView !== "admin" || auth.user?.role === "admin") return;
@@ -660,6 +700,7 @@ export default function Workbench({ initialView = "assistant" }) {
     if (Object.prototype.hasOwnProperty.call(patch, "draft")) setKnowledgeDraft(cloneKnowledgeDraft(patch.draft));
     if (Object.prototype.hasOwnProperty.call(patch, "jobId")) setKnowledgeJobId(patch.jobId);
     if (Object.prototype.hasOwnProperty.call(patch, "deleteName")) setKnowledgeDeleteName(patch.deleteName);
+    if (Object.prototype.hasOwnProperty.call(patch, "previewMode")) setKnowledgePreviewMode(patch.previewMode);
     if (Object.prototype.hasOwnProperty.call(patch, "previewGraph")) setKnowledgePreviewGraph(patch.previewGraph);
     if (Object.prototype.hasOwnProperty.call(patch, "status")) setKnowledgeStatus(patch.status);
     if (Object.prototype.hasOwnProperty.call(patch, "busy")) setKnowledgeBusy(patch.busy);
@@ -722,11 +763,12 @@ export default function Workbench({ initialView = "assistant" }) {
       applyKnowledgeState({
         draft: nextDraft,
         jobId: "",
+        previewMode: "draft",
         previewGraph: data.preview_graph?.nodes?.length ? data.preview_graph : buildPreviewGraphFromDraft(data.extracted),
         status: "识别完成，右侧已生成图谱预览；确认后才会正式入库并生成记录",
       });
     } catch (error) {
-      applyKnowledgeState({ previewGraph: { nodes: [], edges: [] }, status: "识别失败：" + (error?.message || "请检查资料格式") });
+      applyKnowledgeState({ previewMode: "draft", previewGraph: { nodes: [], edges: [] }, status: "识别失败：" + (error?.message || "请检查资料格式") });
     } finally {
       applyKnowledgeState({ busy: false });
     }
@@ -747,13 +789,14 @@ export default function Workbench({ initialView = "assistant" }) {
       applyKnowledgeState({
         file: null,
         jobId: "",
+        previewMode: "committed",
         status: `已确认导入：${entityName}，正式记录已生成；实体索引已增量更新`,
         text: "",
       });
       await loadKnowledgePreviewGraph(entityName);
       await refreshKnowledgeImports();
     } catch (error) {
-      applyKnowledgeState({ status: "导入失败：" + (error?.message || "请检查 Neo4j 或抽取字段") });
+      applyKnowledgeState({ status: error?.message || "导入失败，请检查 Neo4j 或抽取字段" });
     } finally {
       applyKnowledgeState({ busy: false });
     }
@@ -774,6 +817,7 @@ export default function Workbench({ initialView = "assistant" }) {
       applyKnowledgeState({
         deleteName: "",
         draft: cloneKnowledgeDraft(),
+        previewMode: "draft",
         previewGraph: { nodes: [], edges: [] },
         status: `已删除方药：${cleanName}，正式删除记录已生成；实体索引映射已同步屏蔽`,
       });
@@ -782,7 +826,7 @@ export default function Workbench({ initialView = "assistant" }) {
         setGraph({ nodes: [], edges: [] });
       }
     } catch (error) {
-      applyKnowledgeState({ status: "删除失败：" + (error?.message || "未找到该方药") });
+      applyKnowledgeState({ status: error?.message || "删除失败" });
     } finally {
       applyKnowledgeState({ busy: false });
     }
@@ -796,9 +840,9 @@ export default function Workbench({ initialView = "assistant" }) {
     }
     try {
       const nextGraph = await fetchKnowledgeGraph(cleanName, { depth: 2, limit: 80 });
-      applyKnowledgeState({ previewGraph: nextGraph.nodes?.length ? nextGraph : buildPreviewGraphFromDraft(knowledgeDraft) });
+      applyKnowledgeState({ previewMode: "committed", previewGraph: nextGraph.nodes?.length ? nextGraph : buildPreviewGraphFromDraft(knowledgeDraft) });
     } catch (error) {
-      applyKnowledgeState({ previewGraph: buildPreviewGraphFromDraft(knowledgeDraft) });
+      applyKnowledgeState({ previewMode: "committed", previewGraph: buildPreviewGraphFromDraft(knowledgeDraft) });
     }
   }
 
@@ -1428,6 +1472,7 @@ export default function Workbench({ initialView = "assistant" }) {
             setKnowledgeFile={setKnowledgeFile}
             knowledgeDraft={knowledgeDraft}
             knowledgePreviewGraph={knowledgePreviewGraph}
+            knowledgePreviewMode={knowledgePreviewMode}
             knowledgeStatus={knowledgeStatus}
             knowledgeBusy={knowledgeBusy}
             hasWebGL={hasWebGL}
@@ -1660,25 +1705,27 @@ function SearchPanel(props) {
           <p className="eyebrow">{"实体详情"}</p>
           {selectedResult ? (
             <>
-              <h2>{selectedResult.name}</h2>
-              <div className="detail-tabs">
-                <span className={["entity-chip", selectedResult.label].join(" ")}>{entityLabel(selectedResult.label)}</span>
-                <span>{countRelated(selectedResult)} {"关系"}</span>
+              <div className="detail-panel-body">
+                <h2>{selectedResult.name}</h2>
+                <div className="detail-tabs">
+                  <span className={["entity-chip", selectedResult.label].join(" ")}>{entityLabel(selectedResult.label)}</span>
+                  <span>{countRelated(selectedResult)} {"关系"}</span>
+                </div>
+                <dl>
+                  {primaryDetailEntries.map(([key, value]) => (
+                    <div key={key}>
+                      <dt>{propertyLabel(key)}</dt>
+                      <dd>{String(value)}</dd>
+                    </div>
+                  ))}
+                  {relatedDetail && (
+                    <div>
+                      <dt>{"关联知识"}</dt>
+                      <dd>{String(relatedDetail)}</dd>
+                    </div>
+                  )}
+                </dl>
               </div>
-              <dl>
-                {primaryDetailEntries.map(([key, value]) => (
-                  <div key={key}>
-                    <dt>{propertyLabel(key)}</dt>
-                    <dd>{String(value)}</dd>
-                  </div>
-                ))}
-                {relatedDetail && (
-                  <div>
-                    <dt>{"关联知识"}</dt>
-                    <dd>{String(relatedDetail)}</dd>
-                  </div>
-                )}
-              </dl>
               <Link className="secondary-link" href={"/assistant?q=" + encodeURIComponent(selectedResult.name)}>{"在问答中解释"}</Link>
             </>
           ) : (
@@ -1854,7 +1901,105 @@ function GraphPanel(props) {
   const [graphSize, setGraphSize] = useState({ width: 1, height: 1 });
   useEffect(() => { function measureScene() { const rect = sceneRef.current?.getBoundingClientRect(); if (!rect) return; setGraphSize({ width: Math.max(320, Math.floor(rect.width)), height: Math.max(360, Math.floor(rect.height)) }); } measureScene(); const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measureScene) : null; if (observer && sceneRef.current) observer.observe(sceneRef.current); window.addEventListener("resize", measureScene); return () => { observer?.disconnect(); window.removeEventListener("resize", measureScene); }; }, []);
   useEffect(() => { const timers = [700, 1600, 2800].map((delay) => window.setTimeout(() => centerGraphCamera(graphRef, 720), delay)); return () => { timers.forEach(window.clearTimeout); }; }, [graphData.nodes.length, graphData.links.length, graphFocus, graphRef]);
-  return <div className="graph-layout"><section className="graph-toolbar"><div className="graph-meta"><span className="entity-chip Formula">{graphFocus}</span><strong>{rawGraph.nodes.length} {"节点"}</strong><strong>{rawGraph.edges.length} {"关系"}</strong>{loading && <strong>{"加载中"}</strong>}</div><div className="graph-controls"><label>{"深度"}<select value={graphDepth} onChange={(event) => setGraphDepth(Number(event.target.value))}><option value={1}>{"1 跳"}</option><option value={2}>{"2 跳"}</option></select></label></div></section><section className="graph-scene" ref={sceneRef}><div className="relation-filters">{relationFilters.map((label) => <button key={label} type="button" className={activeRelations.includes(label) ? "relation-filter active" : "relation-filter"} onClick={() => switchRelation(label)}>{relationLabel(label)}</button>)}</div>{hasWebGL ? <ThreeKnowledgeGraph graphData={graphData} graphFocus={graphFocus} graphSize={graphSize} onSelect={(node) => { setSelectedNode(node); setGraphFocus(node.name); }} /> : <KnowledgeGraphFallback graph={{ nodes: graphData.nodes, edges: graphData.links }} focus={graphFocus} onSelect={(node) => { setSelectedNode(node); setGraphFocus(node.name); }} />}<div className="graph-legend">{["Formula", "Herb", "Symptom", "Effect", "Source"].map((label) => <span key={label}><i style={{ background: entityColor(label) }} />{entityLabel(label)}</span>)}</div></section><aside className="graph-inspector"><p className="eyebrow">{"实体详情"}</p>{selectedNode ? <><h2>{selectedNode.name}</h2><span className={["entity-chip", selectedNode.label].join(" ")}>{entityLabel(selectedNode.label)}</span><dl>{Object.entries(selectedNode.properties || {}).map(([key, value]) => <div key={key}><dt>{propertyLabel(key)}</dt><dd>{String(value)}</dd></div>)}{!Object.keys(selectedNode.properties || {}).length && <div><dt>{"提示"}</dt><dd>{"当前实体暂无更多属性，可继续扩展关联节点。"}</dd></div>}</dl><Link className="primary-link" href={"/assistant?q=" + encodeURIComponent(selectedNode.name)}>{"在问答中解释"}</Link><Link className="secondary-link" href={"/search?q=" + encodeURIComponent(selectedNode.name)}>{"返回搜索结果"}</Link></> : <p className="empty-note">{"点击图谱节点查看详情"}</p>}<div className="graph-state"><span><Layers3 size={14} />{"稳定布局"}</span><span><Activity size={14} />{"可拖动旋转"}</span><span><Network size={14} />{"关系可筛选"}</span></div></aside></div>;
+  return (
+    <div className="graph-layout">
+      <section className="graph-toolbar">
+        <div className="graph-meta">
+          <span className="entity-chip Formula">{graphFocus}</span>
+          <strong>{rawGraph.nodes.length} {"节点"}</strong>
+          <strong>{rawGraph.edges.length} {"关系"}</strong>
+          {loading && <strong>{"加载中"}</strong>}
+        </div>
+        <div className="graph-controls">
+          <label>
+            {"深度"}
+            <select value={graphDepth} onChange={(event) => setGraphDepth(Number(event.target.value))}>
+              <option value={1}>{"1 跳"}</option>
+              <option value={2}>{"2 跳"}</option>
+            </select>
+          </label>
+        </div>
+      </section>
+      <section className="graph-scene" ref={sceneRef}>
+        <div className="relation-filters">
+          {relationFilters.map((label) => (
+            <button
+              key={label}
+              type="button"
+              className={activeRelations.includes(label) ? "relation-filter active" : "relation-filter"}
+              onClick={() => switchRelation(label)}
+            >
+              {relationLabel(label)}
+            </button>
+          ))}
+        </div>
+        {hasWebGL ? (
+          <ThreeKnowledgeGraph
+            graphData={graphData}
+            graphFocus={graphFocus}
+            graphSize={graphSize}
+            onSelect={(node) => {
+              setSelectedNode(node);
+              setGraphFocus(node.name);
+            }}
+          />
+        ) : (
+          <KnowledgeGraphFallback
+            graph={{ nodes: graphData.nodes, edges: graphData.links }}
+            focus={graphFocus}
+            onSelect={(node) => {
+              setSelectedNode(node);
+              setGraphFocus(node.name);
+            }}
+          />
+        )}
+        <div className="graph-legend">
+          {["Formula", "Herb", "Symptom", "Effect", "Source"].map((label) => (
+            <span key={label}>
+              <i style={{ background: entityColor(label) }} />
+              {entityLabel(label)}
+            </span>
+          ))}
+        </div>
+      </section>
+      <aside className="graph-inspector">
+        <p className="eyebrow">{"实体详情"}</p>
+        {selectedNode ? (
+          <>
+            <div className="graph-inspector-body">
+              <h2>{selectedNode.name}</h2>
+              <span className={["entity-chip", selectedNode.label].join(" ")}>{entityLabel(selectedNode.label)}</span>
+              <dl>
+                {Object.entries(selectedNode.properties || {}).map(([key, value]) => (
+                  <div key={key}>
+                    <dt>{propertyLabel(key)}</dt>
+                    <dd>{String(value)}</dd>
+                  </div>
+                ))}
+                {!Object.keys(selectedNode.properties || {}).length && (
+                  <div>
+                    <dt>{"提示"}</dt>
+                    <dd>{"当前实体暂无更多属性，可继续扩展关联节点。"}</dd>
+                  </div>
+                )}
+              </dl>
+            </div>
+            <div className="graph-inspector-actions">
+              <Link className="primary-link" href={"/assistant?q=" + encodeURIComponent(selectedNode.name)}>{"在问答中解释"}</Link>
+              <Link className="secondary-link" href={"/search?q=" + encodeURIComponent(selectedNode.name)}>{"返回搜索结果"}</Link>
+            </div>
+          </>
+        ) : (
+          <p className="empty-note">{"点击图谱节点查看详情"}</p>
+        )}
+        <div className="graph-state">
+          <span><Layers3 size={14} />{"稳定布局"}</span>
+          <span><Activity size={14} />{"可拖动旋转"}</span>
+          <span><Network size={14} />{"关系可筛选"}</span>
+        </div>
+      </aside>
+    </div>
+  );
 }
 
 function ThreeKnowledgeGraph({ graphData, graphFocus, graphSize, resetKey, onSelect }) {
@@ -2856,6 +3001,7 @@ function AdminPanel({
   setKnowledgeFile,
   knowledgeDraft,
   knowledgePreviewGraph,
+  knowledgePreviewMode,
   knowledgeStatus,
   knowledgeBusy,
   hasWebGL,
@@ -2911,6 +3057,7 @@ function AdminPanel({
           status={knowledgeStatus}
           busy={knowledgeBusy}
           hasWebGL={hasWebGL}
+          previewMode={knowledgePreviewMode}
           deleteName={deleteName}
           setDeleteName={setDeleteName}
           onExtract={onExtractKnowledge}
@@ -2925,7 +3072,7 @@ function AdminPanel({
   );
 }
 
-function KnowledgeImportPanel({ text, setText, file, setFile, draft, previewGraph, status, busy, hasWebGL, deleteName, setDeleteName, onExtract, onImport, onDelete }) {
+function KnowledgeImportPanel({ text, setText, file, setFile, draft, previewGraph, previewMode, status, busy, hasWebGL, deleteName, setDeleteName, onExtract, onImport, onDelete }) {
   const entityName = draft.herb.name.trim();
   return (
     <form className="knowledge-import-workbench" onSubmit={onExtract}>
@@ -2971,7 +3118,7 @@ function KnowledgeImportPanel({ text, setText, file, setFile, draft, previewGrap
           <small className="knowledge-status">{status}</small>
           <button type="button" className="knowledge-confirm-button" disabled={busy || !entityName} onClick={onImport}>{"确认导入图谱"}</button>
         </section>
-        <KnowledgeGraphPreview graph={previewGraph} focus={entityName} draft={draft} hasWebGL={hasWebGL} />
+        <KnowledgeGraphPreview graph={previewGraph} focus={entityName} draft={draft} hasWebGL={hasWebGL} previewMode={previewMode} />
       </div>
     </form>
   );
@@ -2988,7 +3135,7 @@ function KnowledgeImportHistory({ imports, onRefresh }) {
         {imports.map((item) => (
           <article key={item.id} className={["knowledge-history-row", item.operation_type, item.is_committed || item.status === "committed" ? "committed" : "draft"].join(" ")}>
             <span className={["operation-badge", item.operation_type].join(" ")}>{item.operation_type === "delete" ? "删除" : "添加"}</span>
-            <strong>{item.entity_name || item.extracted?.herb?.name || "未命名方药"}</strong>
+            <strong>{knowledgeHistoryDisplayName(item)}</strong>
             <span>{formatShanghaiDateTime(item.finished_at || item.created_at)}</span>
             <small>{item.is_committed || item.status === "committed" ? "正式生效" : "未生效"}</small>
           </article>
@@ -2999,12 +3146,13 @@ function KnowledgeImportHistory({ imports, onRefresh }) {
   );
 }
 
-function KnowledgeGraphPreview({ graph, focus, draft, hasWebGL }) {
+function KnowledgeGraphPreview({ graph, focus, draft, hasWebGL, previewMode }) {
   const sceneRef = useRef(null);
   const [graphSize, setGraphSize] = useState({ width: 1, height: 1 });
   const [selectedNode, setSelectedNode] = useState(null);
   const [previewDepth, setPreviewDepth] = useState(1);
   const [depthGraph, setDepthGraph] = useState(null);
+  const depthSwitchEnabled = previewMode === "committed";
   const localDepthGraph = useMemo(() => filterGraphByDepth(graph, focus, previewDepth), [graph, focus, previewDepth]);
   const displayGraph = depthGraph?.nodes?.length ? depthGraph : localDepthGraph.nodes.length ? localDepthGraph : graph;
   const previewData = useMemo(() => toRenderableGraph(displayGraph, focus), [displayGraph, focus]);
@@ -3021,11 +3169,16 @@ function KnowledgeGraphPreview({ graph, focus, draft, hasWebGL }) {
     return () => { observer?.disconnect(); window.removeEventListener("resize", measureScene); };
   }, []);
   useEffect(() => {
+    if (!depthSwitchEnabled && previewDepth !== 1) {
+      setPreviewDepth(1);
+    }
+  }, [depthSwitchEnabled, previewDepth]);
+  useEffect(() => {
     let cancelled = false;
     const cleanFocus = String(focus || "").trim();
     setSelectedNode(null);
     setDepthGraph(null);
-    if (!cleanFocus) return () => { cancelled = true; };
+    if (!cleanFocus || previewMode !== "committed") return () => { cancelled = true; };
     fetchKnowledgeGraph(cleanFocus, { depth: previewDepth, limit: 80 })
       .then((nextGraph) => {
         if (!cancelled) setDepthGraph(nextGraph?.nodes?.length ? nextGraph : null);
@@ -3034,9 +3187,12 @@ function KnowledgeGraphPreview({ graph, focus, draft, hasWebGL }) {
         if (!cancelled) setDepthGraph(null);
       });
     return () => { cancelled = true; };
-  }, [focus, graph, previewDepth]);
+  }, [focus, graph, previewDepth, previewMode]);
   const hasGraph = previewData.nodes.length > 0;
   const title = focus || "等待识别";
+  const previewCountText = hasGraph
+    ? `${previewData.nodes.length} 节点 · ${previewData.links.length} 关系${depthSwitchEnabled ? "" : " · 直连预览"}`
+    : "空状态";
   return (
     <section className="knowledge-preview-zone">
       <div className="knowledge-zone-title">
@@ -3045,9 +3201,19 @@ function KnowledgeGraphPreview({ graph, focus, draft, hasWebGL }) {
           <div className="knowledge-preview-controls" aria-label="图谱深度切换">
             <span>{"深度"}</span>
             <button type="button" className={previewDepth === 1 ? "active" : ""} onClick={() => setPreviewDepth(1)}>{"1跳"}</button>
-            <button type="button" className={previewDepth === 2 ? "active" : ""} onClick={() => setPreviewDepth(2)}>{"2跳"}</button>
+            <button
+              type="button"
+              className={previewDepth === 2 ? "active" : ""}
+              disabled={!depthSwitchEnabled}
+              title={depthSwitchEnabled ? "查看正式图谱 2 跳关系" : "AI 识别预览阶段只展示直连关系；确认入库后可查看 2 跳"}
+              onClick={() => {
+                if (depthSwitchEnabled) setPreviewDepth(2);
+              }}
+            >
+              {"2跳"}
+            </button>
           </div>
-          <span className="knowledge-preview-count">{hasGraph ? `${previewData.nodes.length} 节点 · ${previewData.links.length} 关系` : "空状态"}</span>
+          <span className="knowledge-preview-count">{previewCountText}</span>
         </div>
       </div>
       <div className="knowledge-preview-scene" ref={sceneRef}>
@@ -3083,7 +3249,15 @@ function KnowledgeGraphPreview({ graph, focus, draft, hasWebGL }) {
       </div>
       <div className="knowledge-preview-summary">
         <strong>{selectedNode?.name || draft.herb.name || "尚未识别方药"}</strong>
-        <span>{selectedNode ? entityLabel(selectedNode.label) : draft.herb.ingredients ? `组成：${draft.herb.ingredients}` : "支持方剂文档、药材文本和手动粘贴资料"}</span>
+        <span>
+          {selectedNode
+            ? entityLabel(selectedNode.label)
+            : !depthSwitchEnabled
+              ? "AI 识别预览阶段只展示本次识别出的直接关系；确认入库后可查看正式图谱 1/2 跳。"
+              : draft.herb.ingredients
+                ? `组成：${draft.herb.ingredients}`
+                : "支持方剂文档、药材文本和手动粘贴资料"}
+        </span>
       </div>
     </section>
   );

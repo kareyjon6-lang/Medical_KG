@@ -202,13 +202,13 @@ def test_graph_builder_deduplicates_nodes_and_edges_for_frontend():
     fake = FakeNeo4j(
         [
             {
-                "center": {"name": "麻黄汤", "label": "Formula"},
-                "related": {"name": "麻黄", "label": "Herb", "effect": "发汗解表"},
+                "source": {"name": "麻黄汤", "label": "Formula"},
+                "target": {"name": "麻黄", "label": "Herb", "effect": "发汗解表"},
                 "rel_type": "HAS_INGREDIENT",
             },
             {
-                "center": {"name": "麻黄汤", "label": "Formula"},
-                "related": {"name": "麻黄", "label": "Herb", "effect": "发汗解表"},
+                "source": {"name": "麻黄汤", "label": "Formula"},
+                "target": {"name": "麻黄", "label": "Herb", "effect": "发汗解表"},
                 "rel_type": "HAS_INGREDIENT",
             },
         ]
@@ -216,7 +216,8 @@ def test_graph_builder_deduplicates_nodes_and_edges_for_frontend():
 
     graph = build_knowledge_graph(fake, "麻黄汤", depth=1, limit=20)
 
-    assert fake.calls[0][1] == {"query": "麻黄汤", "depth": 1, "limit": 20}
+    assert fake.calls[0][1] == {"query": "麻黄汤"}
+    assert fake.calls[1][1] == {"query": "麻黄汤", "depth": 1, "limit": 20}
     assert graph["nodes"] == [
         {"id": "Formula:麻黄汤", "name": "麻黄汤", "label": "Formula", "properties": {}},
         {
@@ -240,8 +241,8 @@ def test_graph_builder_uses_two_hop_query_when_depth_is_two():
     fake = FakeNeo4j(
         [
             {
-                "center": {"name": "麻黄汤", "label": "Formula"},
-                "related": {"name": "麻黄", "label": "Herb"},
+                "source": {"name": "麻黄汤", "label": "Formula"},
+                "target": {"name": "麻黄", "label": "Herb"},
                 "rel_type": "HAS_INGREDIENT",
             }
         ]
@@ -249,6 +250,64 @@ def test_graph_builder_uses_two_hop_query_when_depth_is_two():
 
     build_knowledge_graph(fake, "麻黄汤", depth=2, limit=20)
 
-    query, parameters = fake.calls[0]
+    query, parameters = fake.calls[1]
     assert parameters == {"query": "麻黄汤", "depth": 2, "limit": 20}
     assert "*1..2" in query
+
+
+def test_graph_builder_falls_back_to_contains_only_when_exact_center_missing():
+    class SequencedNeo4j:
+        def __init__(self):
+            self.calls = []
+
+        def run_cypher(self, query, parameters=None):
+            self.calls.append((query, parameters or {}))
+            if len(self.calls) == 1:
+                return []
+            return [
+                {
+                    "source": {"name": "阿胶鸡子黄汤", "label": "Formula"},
+                    "target": {"name": "阿胶", "label": "Herb"},
+                    "rel_type": "HAS_INGREDIENT",
+                }
+            ]
+
+    fake = SequencedNeo4j()
+    graph = build_knowledge_graph(fake, "阿胶", depth=1, limit=20)
+
+    assert fake.calls[0][1] == {"query": "阿胶"}
+    assert "center.name = $query" not in fake.calls[1][0]
+    assert "CONTAINS toLower($query)" in fake.calls[1][0]
+    assert graph["nodes"][0]["name"] == "阿胶鸡子黄汤"
+
+
+def test_graph_builder_keeps_real_two_hop_edges_instead_of_collapsing_to_center():
+    fake = FakeNeo4j(
+        [
+            {
+                "source": {"name": "阿魏", "label": "Herb"},
+                "target": {"name": "阿魏化痞膏", "label": "Formula"},
+                "rel_type": "HAS_INGREDIENT",
+            },
+            {
+                "source": {"name": "阿魏化痞膏", "label": "Formula"},
+                "target": {"name": "脘腹疼痛", "label": "Symptom"},
+                "rel_type": "ALLEVIATES_SYMPTOM",
+            },
+        ]
+    )
+
+    graph = build_knowledge_graph(fake, "阿魏", depth=2, limit=20)
+
+    assert {
+        "id": "Herb:阿魏-HAS_INGREDIENT-Formula:阿魏化痞膏",
+        "source": "Herb:阿魏",
+        "target": "Formula:阿魏化痞膏",
+        "label": "HAS_INGREDIENT",
+    } in graph["edges"]
+    assert {
+        "id": "Formula:阿魏化痞膏-ALLEVIATES_SYMPTOM-Symptom:脘腹疼痛",
+        "source": "Formula:阿魏化痞膏",
+        "target": "Symptom:脘腹疼痛",
+        "label": "ALLEVIATES_SYMPTOM",
+    } in graph["edges"]

@@ -4,12 +4,9 @@ import re
 import threading
 from difflib import SequenceMatcher
 from io import BytesIO
-from typing import Any, Dict, Iterable, List
-
-from langchain_core.messages import HumanMessage
+from typing import Any, Dict, Iterable, List, Optional
 
 from common.config import Config
-from common.llm import my_llm
 from common.path_utils import get_file_path
 
 
@@ -39,13 +36,20 @@ _runtime_refresh_requested = False
 
 
 class FormulaNotFoundError(ValueError):
-    def __init__(self, name: str, suggestions: List[str] | None = None):
+    def __init__(self, name: str, suggestions: Optional[List[str]] = None):
         self.name = name
         self.suggestions = suggestions or []
         message = f"未在知识图谱中找到方药：{name}"
         if self.suggestions:
             message += "。可参考相似名称：" + "、".join(self.suggestions)
         super().__init__(message)
+
+
+class FormulaAlreadyExistsError(ValueError):
+    def __init__(self, name: str, labels: Optional[List[str]] = None):
+        self.name = name
+        self.labels = labels or []
+        super().__init__(f"知识图谱中已存在方药：{name}")
 
 
 def parse_document_text(filename: str, content: bytes) -> str:
@@ -71,17 +75,34 @@ def parse_document_text(filename: str, content: bytes) -> str:
 def extract_herb_knowledge(text: str, llm=None) -> Dict[str, Any]:
     document_text = _normalize_document_text(text)
     clean_text = _normalize_text(document_text)
+    bare_payload = _extract_bare_entity_payload(document_text)
+    if bare_payload:
+        return normalize_knowledge_payload(bare_payload)
     if len(clean_text) < 10:
         raise ValueError("请输入更完整的药材资料。")
     structured_payload = _extract_structured_herb_document(document_text)
     if structured_payload:
-        return normalize_knowledge_payload(structured_payload)
-    model = llm or my_llm
+        normalized = normalize_knowledge_payload(structured_payload)
+        _ensure_subject_grounded_in_source(normalized["herb"]["name"], document_text)
+        return normalized
+    if llm is None:
+        from common.llm import my_llm
+
+        model = my_llm
+    else:
+        model = llm
     prompt = _build_extraction_prompt(document_text[:12000])
-    response = model.invoke([HumanMessage(content=prompt)])
+    try:
+        from langchain_core.messages import HumanMessage
+
+        response = model.invoke([HumanMessage(content=prompt)])
+    except ImportError:
+        response = model.invoke([prompt])
     raw_content = getattr(response, "content", response)
     payload = _parse_json_object(str(raw_content or ""))
-    return normalize_knowledge_payload(payload)
+    normalized = normalize_knowledge_payload(payload)
+    _ensure_subject_grounded_in_source(normalized["herb"]["name"], document_text)
+    return normalized
 
 
 def normalize_knowledge_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -114,6 +135,11 @@ def import_knowledge_to_neo4j(neo4j_client, payload: Dict[str, Any]) -> Dict[str
     normalized = normalize_knowledge_payload(payload)
     herb = normalized["herb"]
     relations = normalized["relations"]
+    if _is_placeholder_name(herb["name"]):
+        raise ValueError("方药名称异常，疑似编码损坏，请重新输入或上传 UTF-8 文档。")
+    existing = find_formula_entity(neo4j_client, herb["name"])
+    if existing:
+        raise FormulaAlreadyExistsError(herb["name"], existing.get("labels", []))
     subject_label = _clean_label(herb.get("label") or "Herb")
     queries = [
         (
@@ -204,7 +230,7 @@ def delete_formula_from_neo4j(neo4j_client, name: str) -> Dict[str, Any]:
     }
 
 
-def find_formula_entity(neo4j_client, name: str) -> Dict[str, Any] | None:
+def find_formula_entity(neo4j_client, name: str) -> Optional[Dict[str, Any]]:
     clean_name = _normalize_text(name)
     if not clean_name:
         return None
@@ -380,7 +406,8 @@ def _extract_structured_herb_document(text: str) -> Dict[str, Any]:
         return {}
 
     formula_name = _match_first(r"【方剂名称】\s*([^\n]+)", joined)
-    name = formula_name or _match_first(r"【中药名称】\s*([^\n]+)", joined)
+    herb_name = _match_first(r"【中药名称】\s*([^\n]+)", joined)
+    name = formula_name or herb_name
     if not name:
         for index, line in enumerate(lines):
             if line in {"名称", "中药名称", "方剂名称"} and index + 1 < len(lines):
@@ -389,14 +416,14 @@ def _extract_structured_herb_document(text: str) -> Dict[str, Any]:
     if not name:
         return {}
 
-    is_formula = bool(formula_name) or any(heading in joined for heading in ("组成", "方歌", "功用"))
+    label = _detect_structured_subject_label(lines, joined, formula_name=formula_name, herb_name=herb_name)
     ingredients = _section_text(lines, "组成", _STRUCTURED_SECTION_HEADINGS)
     source = _section_text(lines, "出处", _STRUCTURED_SECTION_HEADINGS)
     effect = _section_text(lines, "功用", _STRUCTURED_SECTION_HEADINGS) or _section_text(lines, "功效", _STRUCTURED_SECTION_HEADINGS)
     indication = _section_text(lines, "主治", _STRUCTURED_SECTION_HEADINGS)
     herb = {
         "name": _clean_heading_value(name),
-        "label": "Formula" if is_formula else "Herb",
+        "label": label,
         "source": source,
         "ingredients": ingredients,
         "origin": _section_text(lines, "来源", _STRUCTURED_SECTION_HEADINGS),
@@ -434,6 +461,30 @@ def _extract_structured_herb_document(text: str) -> Dict[str, Any]:
     return {"herb": herb, "relations": relations}
 
 
+def _extract_bare_entity_payload(text: str) -> Dict[str, Any]:
+    clean_text = _normalize_text(text)
+    if not clean_text or len(clean_text) > 20:
+        return {}
+    if any(marker in clean_text for marker in ("【", "】", "来源", "出处", "组成", "功效", "功用", "主治", "归经", "经脉", "用法", "禁忌")):
+        return {}
+    if not re.fullmatch(r"[\u4e00-\u9fffA-Za-z0-9·\-\(\)（）]{2,20}", clean_text):
+        return {}
+    return {
+        "herb": {
+            "name": clean_text,
+            "label": _guess_subject_label_from_name(clean_text),
+        },
+        "relations": [],
+    }
+
+
+def _is_placeholder_name(value: str) -> bool:
+    text = _normalize_text(value)
+    if not text:
+        return False
+    return all(char in {"?", "？", "\ufffd"} for char in text)
+
+
 _STRUCTURED_SECTION_HEADINGS = {
     "名称",
     "来源",
@@ -459,7 +510,7 @@ _STRUCTURED_SECTION_HEADINGS = {
 def _section_text(lines: List[str], heading: str, headings: set) -> str:
     start = -1
     for index, line in enumerate(lines):
-        if line == heading or line.startswith(f"{heading} "):
+        if _matches_structured_heading(line, heading):
             start = index
             break
     if start == -1:
@@ -471,14 +522,95 @@ def _section_text(lines: List[str], heading: str, headings: set) -> str:
         return ""
 
     chunks: List[str] = []
+    inline_value = _extract_inline_heading_value(lines[start], heading)
+    if inline_value:
+        chunks.append(inline_value)
     for line in lines[start + 1 :]:
         clean_line = line.strip()
-        if clean_line in headings or clean_line.startswith("【"):
+        if clean_line.startswith("【") or _starts_with_structured_heading(clean_line, headings):
             break
         if clean_line.endswith("的效果") or clean_line.endswith("的药方"):
             break
         chunks.append(clean_line)
     return _clean_heading_value(" ".join(chunks))
+
+
+def _detect_structured_subject_label(
+    lines: List[str],
+    joined: str,
+    *,
+    formula_name: str,
+    herb_name: str,
+) -> str:
+    if formula_name:
+        return "Formula"
+    if herb_name:
+        return "Herb"
+
+    formula_signals = sum(
+        1 for marker in ("组成", "功用", "方歌", "方解", "加减", "处方") if _has_structured_heading(lines, marker)
+    )
+    herb_signals = sum(
+        1 for marker in ("来源", "性味", "归经", "经脉", "炮制", "原形态", "生境分布", "制法", "性状") if _has_structured_heading(lines, marker)
+    )
+    if "的药方" in joined:
+        formula_signals += 2
+
+    if formula_signals >= 2 and herb_signals == 0:
+        return "Formula"
+    return "Herb"
+
+
+def _guess_subject_label_from_name(name: str) -> str:
+    clean_name = _normalize_text(name)
+    if re.search(r"(汤|丸|散|膏|饮|丹|剂|囊|片|颗粒|露|酒|茶|方)$", clean_name):
+        return "Formula"
+    return "Herb"
+
+
+def _has_structured_heading(lines: List[str], heading: str) -> bool:
+    return any(_matches_structured_heading(line, heading) for line in lines)
+
+
+def _starts_with_structured_heading(line: str, headings: set) -> bool:
+    return any(_matches_structured_heading(line, heading) for heading in headings)
+
+
+def _matches_structured_heading(line: str, heading: str) -> bool:
+    clean_line = str(line or "").strip()
+    if not clean_line:
+        return False
+    if clean_line == heading:
+        return True
+    if clean_line.startswith((f"{heading} ", f"{heading}：", f"{heading}:")):
+        return True
+    if not clean_line.startswith(heading) or len(clean_line) <= len(heading):
+        return False
+    next_char = clean_line[len(heading)]
+    if next_char == "的":
+        return False
+    return bool(re.match(r"[\u4e00-\u9fff0-9①②③④⑤⑥⑦⑧⑨⑩（(：:]", next_char))
+
+
+def _extract_inline_heading_value(line: str, heading: str) -> str:
+    clean_line = str(line or "").strip()
+    if not _matches_structured_heading(clean_line, heading) or clean_line == heading:
+        return ""
+    remainder = clean_line[len(heading) :].lstrip(" ：:")
+    return _clean_heading_value(remainder)
+
+
+def _ensure_subject_grounded_in_source(subject_name: str, source_text: str) -> None:
+    source = _normalize_grounding_text(source_text)
+    subject = _normalize_grounding_text(subject_name)
+    if not subject:
+        raise ValueError("AI 抽取结果缺少药材名称，请补充后再入库。")
+    if subject and subject not in source:
+        raise ValueError("识别结果与输入资料不一致，请补充更完整的方药资料。")
+
+
+def _normalize_grounding_text(text: str) -> str:
+    return re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]", "", str(text or ""))
 
 
 def _split_terms(text: str, mode: str = "term") -> List[str]:
